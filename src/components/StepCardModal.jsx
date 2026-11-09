@@ -32,8 +32,14 @@ function DiagramSvg({ name }) {
 
 export default function StepCardModal({ article, onClose, onResolved, onEscalate }) {
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
-  const steps = article?.steps || [];
-  const currentStep = steps[currentStepIdx] || "";
+  const rawSteps = article?.steps || [];
+  // Normalize steps: handle both array of strings and array of objects { text: "..." }
+  const steps = rawSteps.map(s => {
+    if (typeof s === "string") return s;
+    if (typeof s === "object" && s !== null) return s.text || s.step || JSON.stringify(s);
+    return String(s || "");
+  });
+  const currentStep = steps[currentStepIdx] || "Follow the recommended troubleshooting process.";
   const isLastStep = currentStepIdx >= steps.length - 1;
 
   const isNetworkCable = article?.id?.includes("net") || article?.title?.toLowerCase().includes("cable") || article?.title?.toLowerCase().includes("internet");

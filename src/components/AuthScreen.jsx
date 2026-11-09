@@ -60,8 +60,9 @@ export default function AuthScreen({ onAuthSuccess }) {
     setDuplicateBlockMsg("");
     setLoading(true);
     try {
+      const redirectUrl = import.meta.env.VITE_APP_URL || window.location.origin;
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin,
+        redirectTo: redirectUrl,
       });
       if (error) throw error;
       setInfoMsg("✅ Password reset link sent! Check your email inbox and follow the link to set a new password.");
@@ -146,11 +147,13 @@ export default function AuthScreen({ onAuthSuccess }) {
           ? companyName.trim() 
           : `${fullName.trim() || cleanEmail.split("@")[0]}'s Workspace`;
 
+        const redirectUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+
         const { data, error } = await supabase.auth.signUp({
           email: cleanEmail,
           password,
           options: {
-            emailRedirectTo: window.location.origin,
+            emailRedirectTo: redirectUrl,
             data: {
               full_name: fullName.trim() || cleanEmail.split("@")[0],
               company_name: finalCompanyName,
