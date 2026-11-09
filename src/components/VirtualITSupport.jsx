@@ -26,7 +26,7 @@ export default function VirtualITSupport({
     {
       role: "assistant",
       type: "welcome",
-      content: "Hello! I am your HelpDeskIQ Virtual IT Assistant. How can I help you today?",
+      content: "Hello! I am your BizaDesk Virtual IT Assistant. How can I help you today?",
       suggestions: [
         "Which issue is active?",
         "No internet connection",
@@ -401,7 +401,7 @@ export default function VirtualITSupport({
                   <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-slate-800/80">
                     <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
                     <span className="text-[10px] font-semibold tracking-wider uppercase text-indigo-400">
-                      HelpDeskIQ Assistant
+                      BizaDesk Assistant
                     </span>
                   </div>
                 )}

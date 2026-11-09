@@ -209,7 +209,7 @@ export default function AuthScreen({ onAuthSuccess }) {
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-400 flex items-center justify-center text-white shadow-xl shadow-indigo-500/20 mb-3">
             <Bot className="w-7 h-7" />
           </div>
-          <h1 className="text-2xl font-extrabold text-white tracking-tight">HelpDeskIQ</h1>
+          <h1 className="text-2xl font-extrabold text-white tracking-tight">Biza<span className="text-indigo-400">Desk</span></h1>
           <p className="text-xs text-slate-400 mt-1">Autonomous IT Support & Incident Command</p>
         </div>
 

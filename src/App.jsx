@@ -1286,7 +1286,7 @@ export default function HelpdeskAI() {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-indigo-400 font-sans text-sm tracking-wider">
         <Activity className="w-5 h-5 animate-spin mr-2" />
-        INITIALIZING HELPDESKIQ...
+        INITIALIZING BIZADESK...
       </div>
     );
   }
@@ -1306,7 +1306,7 @@ export default function HelpdeskAI() {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-indigo-400 font-sans text-sm tracking-wider">
         <Activity className="w-5 h-5 animate-spin mr-2" />
-        LOADING HELPDESKIQ PLATFORM...
+        LOADING BIZADESK PLATFORM...
       </div>
     );
   }
@@ -1336,7 +1336,7 @@ export default function HelpdeskAI() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-sm tracking-tight text-white">HelpDeskIQ</span>
+                <span className="font-extrabold text-sm tracking-tight text-white">Biza<span className="text-indigo-400">Desk</span></span>
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
                   Enterprise
                 </span>
