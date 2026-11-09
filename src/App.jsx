@@ -1257,14 +1257,20 @@ export default function HelpdeskAI() {
     );
   });
 
+  // Individual account type — personal users only see Virtual IT Support and their own tickets.
+  // Business accounts see all tabs gated by their role (admin / technician / user).
+  const isIndividualAccount = currentUserProfile?.account_type === "individual";
+
   const allNavItems = [
     { id: "virtual-it", label: "Virtual IT Support", icon: Bot, roles: ["admin", "technician", "user"] },
     { id: "incidents", label: `Incidents ${activeInc.length ? `(${activeInc.length})` : ""}`, icon: Flame, roles: ["admin", "technician"] },
     { 
       id: "tickets", 
-      label: userRole === "user" 
-        ? `My Tickets (${roleFilteredTickets.length})` 
-        : `Tickets (${roleFilteredTickets.filter(t => t.status !== "RESOLVED").length})`, 
+      label: isIndividualAccount
+        ? `My Tickets (${roleFilteredTickets.length})`
+        : userRole === "user" 
+          ? `My Tickets (${roleFilteredTickets.length})` 
+          : `Tickets (${roleFilteredTickets.filter(t => t.status !== "RESOLVED").length})`, 
       icon: Ticket, 
       roles: ["admin", "technician", "user"] 
     },
@@ -1274,13 +1280,17 @@ export default function HelpdeskAI() {
     { id: "billing", label: "Billing", icon: CreditCard, roles: ["admin"] },
   ];
 
-  const allowedTabs = allNavItems.filter(item => item.roles.includes(userRole));
+  // Individual users: only Virtual IT Support + My Tickets (regardless of role assigned at workspace creation)
+  // Business users: tabs filtered by their assigned role as usual
+  const allowedTabs = isIndividualAccount
+    ? allNavItems.filter(item => ["virtual-it", "tickets"].includes(item.id))
+    : allNavItems.filter(item => item.roles.includes(userRole));
 
   useEffect(() => {
     if (currentUser && !allowedTabs.find(t => t.id === tab)) {
       setTab("virtual-it");
     }
-  }, [userRole]);
+  }, [userRole, isIndividualAccount]);
 
   if (!authChecked) {
     return (
