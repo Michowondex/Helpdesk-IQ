@@ -1,0 +1,2214 @@
+{
+  "meta": {
+    "name": "HelpDeskIQ starter knowledge base",
+    "version": "0.1-draft",
+    "generated": "2026-11-04",
+    "status": "DRAFT. Every article must be reviewed and tested by a technician before use.",
+    "environment": "Windows + macOS; Xerox and Canon commercial printers; Cisco Secure Client / AnyConnect VPN",
+    "placeholders": [
+      "ADAPTER_NAME",
+      "FILE_SHARE",
+      "HELPDESK_PHONE",
+      "INTERNAL_PORTAL",
+      "LOCKOUT_MINUTES",
+      "MAC_REMOTE_TOOL",
+      "MAX_ATTACHMENT_MB",
+      "PING_TARGET",
+      "PRINTER_IP",
+      "PRINTER_LIST_URL",
+      "PRINT_VENDOR_CONTACT",
+      "SECURITY_EMAIL",
+      "SELF_SERVICE_APP",
+      "SELF_SERVICE_RESET_URL",
+      "SOFTWARE_CATALOG_URL",
+      "VPN_GATEWAY",
+      "WIFI_NAME"
+    ],
+    "teams": [
+      "Service Desk",
+      "Network Team",
+      "Hardware Team",
+      "Software Team",
+      "Access Team",
+      "Security Team",
+      "Print Team"
+    ],
+    "imagesNeeded": [
+      "IMG_hw_monitor_cables",
+      "IMG_hw_power_cable",
+      "IMG_net_dock",
+      "IMG_net_link_lights",
+      "IMG_net_port_pc",
+      "IMG_net_wall_port",
+      "IMG_print_network_port",
+      "IMG_print_panel_ready",
+      "IMG_sec_unplug"
+    ],
+    "priorityRule": "Raise priority one level when multiple users or a whole department are affected."
+  },
+  "articles": [
+    {
+      "id": "net-no-internet",
+      "title": "No internet connection",
+      "category": "Network",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "no internet",
+        "internet not working",
+        "can't browse",
+        "cant browse",
+        "no network",
+        "network is down",
+        "net no dey work",
+        "network no dey",
+        "net don cut",
+        "internet don cut",
+        "websites not opening",
+        "no connection",
+        "limited connection",
+        "connected but no internet",
+        "newtork not working"
+      ],
+      "checks": [
+        "adapter_link_state",
+        "ip_config_valid",
+        "ping_gateway",
+        "ping_internet_ip",
+        "dns_resolve"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Check whether other websites or apps work. If only one site fails, tell me which one: the problem may be that site and not your connection."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "If you use a network cable, check it is pushed in until it clicks at both the PC and the wall port. If you use Wi-Fi, make sure Wi-Fi is on and Airplane mode is off.",
+          "image": "IMG_net_port_pc"
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "If you are connected to VPN, disconnect it and test again."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "Restart your computer. This clears many temporary network faults."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "Try a website again. If it still fails, with your permission I will run a quick read-only network check."
+        }
+      ],
+      "fixes": [
+        "flush_dns",
+        "renew_ip"
+      ],
+      "verifyWith": "ping_internet_ip",
+      "escalate": {
+        "team": "Network Team",
+        "priority": "medium",
+        "when": "Still no connection after these steps. Raise to high if several users in the same area are affected."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "net-wifi-cant-connect",
+      "title": "Wi-Fi won't connect or keeps dropping",
+      "category": "Network",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "wifi not working",
+        "wi-fi not connecting",
+        "cant connect to wifi",
+        "wifi keeps disconnecting",
+        "wifi dropping",
+        "no wifi",
+        "wifi disappeared",
+        "wireless problem",
+        "network is poor",
+        "weak signal",
+        "wifi no dey work",
+        "wifi no dey connect"
+      ],
+      "checks": [
+        "adapter_link_state",
+        "wifi_signal",
+        "ip_config_valid",
+        "ping_gateway"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Check Wi-Fi is switched on and Airplane mode is off. Some laptops have a keyboard shortcut or a switch on the side for Wi-Fi."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Move closer to the Wi-Fi access point (the small device on the ceiling or wall) and away from thick walls or lifts."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Select the company Wi-Fi ({{WIFI_NAME}}) and connect. If asked for credentials, use your company login."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "If it still refuses, 'forget' the network and join again. Windows: Settings > Network & internet > Wi-Fi > Manage known networks. Mac: System Settings > Wi-Fi, then the network's Details."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "Restart the computer and try again."
+        }
+      ],
+      "fixes": [
+        "renew_ip",
+        "restart_adapter"
+      ],
+      "verifyWith": "ping_gateway",
+      "escalate": {
+        "team": "Network Team",
+        "priority": "medium",
+        "when": "Fails after forgetting and rejoining, or several people in the same area have the same problem (raise to high)."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "net-slow",
+      "title": "Slow internet",
+      "category": "Network",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "slow internet",
+        "internet is slow",
+        "network slow",
+        "pages loading slowly",
+        "video call lagging",
+        "net dey slow",
+        "slow download",
+        "buffering",
+        "lagging"
+      ],
+      "checks": [
+        "wifi_signal",
+        "ping_gateway",
+        "ping_internet_ip"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Try a few different websites to see whether it's slow everywhere."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Pause large downloads, cloud syncing and video streaming that may be using the connection."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "If you are on Wi-Fi, move closer to the access point or use a network cable if you can.",
+          "image": "IMG_net_port_pc"
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "If you are on VPN, tell me. VPN adds delay, and some company sites are faster without it."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "Restart your computer and test again."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": "ping_internet_ip",
+      "escalate": {
+        "team": "Network Team",
+        "priority": "low",
+        "when": "Still slow after steps. Raise to high if many users are affected at once."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "net-cable-unplugged",
+      "title": "Network cable unplugged or not detected",
+      "category": "Network",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "network cable unplugged",
+        "cable not connected",
+        "red x network",
+        "ethernet not working",
+        "ethernet unplugged",
+        "lan cable",
+        "network cable loose",
+        "no link light",
+        "cable disconnected",
+        "network cable problem",
+        "cable no dey work",
+        "cable don comot"
+      ],
+      "checks": [
+        "adapter_link_state",
+        "ip_config_valid",
+        "ping_gateway"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Look at the back or side of your PC or laptop. Find the network port (it looks like a wide telephone socket) and push the cable in until it clicks.",
+          "image": "IMG_net_port_pc"
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Follow the cable to the wall socket or floor box and check that end is also clicked in.",
+          "image": "IMG_net_wall_port"
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Look at the small lights next to the port. A green or amber light usually means the cable is detected. No light at all points to a faulty cable or port.",
+          "image": "IMG_net_link_lights"
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "If you use a docking station or USB network adapter, unplug it and plug it back in firmly.",
+          "image": "IMG_net_dock"
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "Try a different network cable, or another wall port if one is nearby."
+        },
+        {
+          "n": 6,
+          "os": "all",
+          "text": "I will recheck your connection now."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": "adapter_link_state",
+      "escalate": {
+        "team": "Network Team",
+        "priority": "medium",
+        "when": "Cable and port swap did not help, or the wall port looks dead (hardware or cabling fault)."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "net-dns-errors",
+      "title": "Website not found / DNS error",
+      "category": "Network",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "dns error",
+        "site can't be reached",
+        "server not found",
+        "dns_probe_finished_nxdomain",
+        "this site can't be reached",
+        "website not found",
+        "name not resolved",
+        "err_name_not_resolved",
+        "cannot find server"
+      ],
+      "checks": [
+        "dns_resolve",
+        "ping_internet_ip"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Note the exact error message and the website address you were trying to open."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Try a different website. If others work, the problem is with that one site."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "If it is a company internal site, check whether you need to be connected to VPN."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "With your permission I will clear your computer's saved website-address cache."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "Restart the computer and try again."
+        }
+      ],
+      "fixes": [
+        "flush_dns"
+      ],
+      "verifyWith": "dns_resolve",
+      "escalate": {
+        "team": "Network Team",
+        "priority": "low",
+        "when": "Internal sites fail for many users, or errors continue after steps."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "vpn-cisco-wont-connect",
+      "title": "Cisco VPN won't connect",
+      "category": "VPN",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "vpn not connecting",
+        "vpn wont connect",
+        "cisco vpn problem",
+        "anyconnect not connecting",
+        "secure client not connecting",
+        "cannot connect to vpn",
+        "vpn failed",
+        "vpn timeout",
+        "vpn error",
+        "unable to establish connection secure gateway",
+        "vpn no dey connect",
+        "anyconnect",
+        "cisco secure client"
+      ],
+      "checks": [
+        "ping_internet_ip",
+        "dns_resolve",
+        "time_drift",
+        "vpn_client_status"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "First check normal internet works without VPN by opening a public website. If it doesn't, we fix that first."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Open Cisco Secure Client and check the server address is exactly {{VPN_GATEWAY}} with no typos or extra spaces."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Enter your company username and password, and approve the MFA prompt if you get one. Check Caps Lock."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "Check your computer's date and time are correct and set automatically. A wrong clock can break sign-in."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "Try a different network, such as your phone's hotspot. Some hotel, public and home networks block VPN. If it works there, the first network is blocking it."
+        },
+        {
+          "n": 6,
+          "os": "all",
+          "text": "Close Cisco Secure Client completely, reopen it, then restart your computer."
+        },
+        {
+          "n": 7,
+          "os": "all",
+          "text": "Still failing: write down the exact error message. With your permission I will help you create a diagnostics bundle (DART) from Cisco Secure Client (use its Diagnostics option, or open the DART tool from the Start menu or Mac Launchpad) so it can be attached to your ticket."
+        }
+      ],
+      "fixes": [
+        "sync_time"
+      ],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Network Team",
+        "priority": "medium",
+        "when": "Fails after all steps. Raise to high if several users fail, or the message says 'login denied' or 'unauthorized connection mechanism' (usually a VPN server setting)."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "vpn-cisco-no-access",
+      "title": "VPN connected but can't reach internal sites or files",
+      "category": "VPN",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "vpn connected but cant access",
+        "connected to vpn but no internal sites",
+        "cant reach file server vpn",
+        "vpn connected no access",
+        "cant open intranet vpn",
+        "shared drive not opening vpn",
+        "vpn connected nothing works"
+      ],
+      "checks": [
+        "vpn_client_status",
+        "dns_resolve",
+        "ip_config_valid"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Confirm Cisco Secure Client shows 'Connected'."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Try opening an internal site such as {{INTERNAL_PORTAL}} and tell me exactly what happens."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Disconnect VPN, reconnect, and test again."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "Tell me if any other VPN, security or firewall software is installed on your computer."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "With your permission I will clear your computer's saved website-address cache, then you test again."
+        },
+        {
+          "n": 6,
+          "os": "all",
+          "text": "If still failing, I will help collect a DART diagnostics bundle and pass it to the Network Team. Access rules are set on the VPN server, which only IT can change."
+        }
+      ],
+      "fixes": [
+        "flush_dns"
+      ],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Network Team",
+        "priority": "medium",
+        "when": "Persistent after steps; several users affected means high."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "vpn-cisco-drops",
+      "title": "VPN keeps disconnecting",
+      "category": "VPN",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "vpn keeps disconnecting",
+        "vpn drops",
+        "vpn disconnects after sleep",
+        "vpn keeps dropping",
+        "vpn unstable",
+        "vpn disconnecting",
+        "vpn timeout drops"
+      ],
+      "checks": [
+        "wifi_signal",
+        "ping_gateway",
+        "vpn_client_status"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Tell me when it drops: after being idle, after the laptop sleeps, or at random."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "If you are on Wi-Fi, use a network cable or move closer to the access point. Weak Wi-Fi often causes drops.",
+          "image": "IMG_net_port_pc"
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "After your laptop wakes from sleep, disconnect and reconnect VPN manually."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "Tell me if you have other VPN or network-filtering apps installed. Running two together can cause instability."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "If it keeps happening, try to create the DART diagnostics bundle right after a drop, and I will attach it to your ticket."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Network Team",
+        "priority": "low",
+        "when": "Frequent drops continue after steps."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "vpn-cisco-mac-blocked",
+      "title": "Cisco VPN not working on Mac (blocked or after macOS update)",
+      "category": "VPN",
+      "os": [
+        "mac"
+      ],
+      "keywords": [
+        "vpn mac not working",
+        "anyconnect mac blocked",
+        "secure client mac extension",
+        "vpn after macos update",
+        "system extension blocked",
+        "cisco vpn mac failed",
+        "mac vpn no work",
+        "vpn mac not connecting"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Open System Settings > Privacy & Security and scroll down. If you see a message that software from Cisco was blocked, choose Allow. You may need your Mac password."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Check that any Cisco extensions are switched on. Their location differs by macOS version (look under Privacy & Security, or General > Login Items & Extensions)."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Restart your Mac and open Cisco Secure Client again."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "If this started after a macOS update, tell me your macOS version and the Cisco Secure Client version (Secure Client > About). Some older client versions don't work on newer macOS and IT may need to deploy an updated one. Please don't download installers from other websites."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "If 'Allow' is greyed out or asks for an administrator, IT must approve it for you."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Network Team",
+        "priority": "medium",
+        "when": "User cannot approve the extension, or version mismatch suspected."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "acct-forgot-password",
+      "title": "Forgot password / password expired",
+      "category": "Accounts",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "forgot password",
+        "forgotten password",
+        "reset password",
+        "password reset",
+        "i forgot my password",
+        "change password",
+        "password expired",
+        "password no dey work",
+        "my password is not working",
+        "password"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Please never type your password in this chat."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Use the self-service reset at {{SELF_SERVICE_RESET_URL}} and follow the verification steps."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "If self-service isn't available or fails, I will pass you to the Access Team. They verify your identity before resetting."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "After the reset, sign in again and update the password saved on your phone's email, Wi-Fi and VPN to avoid locking yourself out."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Access Team",
+        "priority": "medium",
+        "when": "Self-service unavailable or failing. A human or approved method must verify identity first."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "acct-locked",
+      "title": "Account locked",
+      "category": "Accounts",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "account locked",
+        "locked out",
+        "too many attempts",
+        "account disabled",
+        "cant login locked",
+        "account blocked",
+        "my account don lock"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Some accounts unlock automatically after {{LOCKOUT_MINUTES}} minutes. If you just entered a wrong password several times, wait and try once, carefully."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "A common cause is an old password saved on another device (phone email, tablet, another PC). Update or remove it there."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Try self-service unlock at {{SELF_SERVICE_RESET_URL}} if available."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "If still locked, I will pass you to the Access Team, who verify your identity before unlocking."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Access Team",
+        "priority": "medium",
+        "when": "Still locked after the wait and device check."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "acct-mfa-problem",
+      "title": "Verification code / authenticator not working",
+      "category": "Accounts",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "mfa not working",
+        "authenticator code wrong",
+        "not receiving verification code",
+        "new phone mfa",
+        "2fa problem",
+        "otp not coming",
+        "authenticator",
+        "verification code",
+        "code not coming"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Check your phone's date and time are set automatically. Codes depend on correct time."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Check your phone has signal or internet, since approval prompts need it."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "If you have a new or lost phone, the Access Team must verify your identity and reset your verification method."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "Never share a verification code with anyone. IT will never ask for it."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Access Team",
+        "priority": "medium",
+        "when": "New or lost phone, or codes still failing."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "email-outlook-wont-open",
+      "title": "Outlook won't open or keeps freezing",
+      "category": "Email",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "outlook not opening",
+        "outlook crashing",
+        "outlook frozen",
+        "outlook not responding",
+        "outlook stuck loading profile",
+        "email app not opening",
+        "outlook hang"
+      ],
+      "checks": [
+        "disk_free",
+        "uptime"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Wait about a minute in case it is still loading, then close it fully. Windows: Task Manager (Ctrl+Shift+Esc), end Outlook. Mac: Option+Cmd+Esc, Force Quit."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Open Outlook again."
+        },
+        {
+          "n": 3,
+          "os": "windows",
+          "text": "Windows: hold the Ctrl key while opening Outlook and choose Yes to start in Safe Mode. If it works there, an add-in is probably the cause, so tell me."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "Restart your computer and try again."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "I can check your free disk space, because a full disk can stop Outlook from opening."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Software Team",
+        "priority": "medium",
+        "when": "Still failing after restart and Safe Mode."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "email-not-sending-receiving",
+      "title": "Email not sending or receiving",
+      "category": "Email",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "email not sending",
+        "email not receiving",
+        "emails stuck in outbox",
+        "cant send email",
+        "not getting emails",
+        "mail delayed",
+        "working offline",
+        "email bounce",
+        "mail no dey send",
+        "mail no dey enter"
+      ],
+      "checks": [
+        "ping_internet_ip"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Check the bottom of Outlook for 'Working Offline' or 'Disconnected'. Windows: Send/Receive tab > Work Offline should be switched off."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Check your internet connection by opening a website."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Check the Outbox for a stuck message. Attachments over {{MAX_ATTACHMENT_MB}} MB won't send. Share large files by link instead."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "Check your Junk/Spam folder for expected mail."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "If you got a bounce-back message, copy the full text and give it to me."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Software Team",
+        "priority": "medium",
+        "when": "Persistent, or many users affected (raise to high)."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "email-mailbox-full",
+      "title": "Mailbox full",
+      "category": "Email",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "mailbox full",
+        "mailbox is full",
+        "storage limit exceeded",
+        "quota exceeded",
+        "cant receive mail full",
+        "mailbox almost full"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Empty your Deleted Items and Junk folders."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Sort by size and delete large attachments you no longer need."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Archive old emails if your organisation allows it."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "Please don't delete anything important. Ask me if unsure."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "If you need more space, I will raise a request, which needs your manager's approval."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Software Team",
+        "priority": "low",
+        "when": "Quota increase requested."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "hw-pc-wont-start",
+      "title": "Computer won't start",
+      "category": "Hardware",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "computer wont start",
+        "laptop wont turn on",
+        "pc no power",
+        "system no dey on",
+        "laptop dead",
+        "black screen at start",
+        "won't boot",
+        "no power light",
+        "stuck on logo",
+        "laptop no dey on"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Check the power cable is firmly in at both the PC and the wall. Try another socket, and make sure any surge protector is switched on.",
+          "image": "IMG_hw_power_cable"
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Laptop: connect the charger and see if the charging light comes on. If the battery was flat, give it 15 minutes before trying again."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Unplug USB devices, docks and external drives, then try again."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "Laptop power reset (most models): unplug the charger, hold the power button for 15 seconds, release, plug the charger in and press power. Models with removable batteries differ."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "Tell me about any beeps, flashing lights or on-screen messages."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Hardware Team",
+        "priority": "high",
+        "when": "No power or no start after these steps."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "hw-slow-pc",
+      "title": "Computer is slow or freezing",
+      "category": "Hardware",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "computer slow",
+        "laptop slow",
+        "pc is slow",
+        "system don slow",
+        "system hanging",
+        "computer freezing",
+        "laptop hang",
+        "slow startup",
+        "computer dey hang",
+        "laptop is hanging"
+      ],
+      "checks": [
+        "uptime",
+        "disk_free"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Restart your computer if it hasn't been restarted in a few days."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Close apps and browser tabs you aren't using."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Open Task Manager (Ctrl+Shift+Esc) or Activity Monitor (Cmd+Space, type Activity Monitor) and tell me which app uses the most CPU or memory."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "I can check free disk space and how long since the last restart."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "Install any pending updates when convenient."
+        }
+      ],
+      "fixes": [
+        "clear_user_temp"
+      ],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Hardware Team",
+        "priority": "low",
+        "when": "Still slow after restart and cleanup."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "hw-blank-screen",
+      "title": "Blank screen or monitor not working",
+      "category": "Hardware",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "screen blank",
+        "no display",
+        "monitor not working",
+        "monitor black",
+        "no signal",
+        "screen flickering",
+        "display not showing",
+        "second monitor not detected",
+        "screen no dey show"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Check the monitor's power light and that it is switched on."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Check the video cable (HDMI, DisplayPort or USB-C) is firmly connected at both the monitor and the PC.",
+          "image": "IMG_hw_monitor_cables"
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Press the monitor's Input/Source button to select the right input."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "Windows: press the Windows key + P and choose Duplicate or Extend. Mac: System Settings > Displays, then hold Option and choose Detect Displays."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "Try a different cable or monitor if you have one."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Hardware Team",
+        "priority": "medium",
+        "when": "No picture on any cable or monitor."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "hw-keyboard-mouse",
+      "title": "Keyboard, mouse or touchpad not working",
+      "category": "Hardware",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "keyboard not working",
+        "mouse not working",
+        "mouse not moving",
+        "keys not typing",
+        "wireless mouse dead",
+        "touchpad not working",
+        "cursor frozen",
+        "mouse no dey work"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Wired: unplug the keyboard or mouse and plug it into a different USB port."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Wireless: replace or charge the batteries, check the on/off switch under the mouse, and re-seat the USB receiver. For Bluetooth, check the device is paired."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Laptop touchpad: look for a function key with a touchpad symbol that may have switched it off."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "Restart the computer and test again."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Hardware Team",
+        "priority": "low",
+        "when": "Device still dead with a known-good port."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "hw-no-sound",
+      "title": "No sound or microphone problem",
+      "category": "Hardware",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "no sound",
+        "speaker not working",
+        "cant hear",
+        "headset not working",
+        "microphone not working",
+        "audio problem",
+        "sound no dey",
+        "mic not working"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Check volume is up and nothing is muted, including a mute button on a headset."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Choose the right output device. Windows: click the speaker icon in the taskbar. Mac: System Settings > Sound."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Unplug and replug your headset or speakers firmly."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "In your meeting app (Teams, Zoom, Meet), open its settings and choose the right speaker and microphone."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "Restart the computer and test again."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Hardware Team",
+        "priority": "low",
+        "when": "Still no audio after steps."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "print-offline",
+      "title": "Printer offline or not printing",
+      "category": "Printing",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "printer offline",
+        "printer not printing",
+        "cant print",
+        "i no fit print",
+        "printer no dey print",
+        "printer not responding",
+        "printer not found",
+        "printer unavailable",
+        "xerox not printing",
+        "canon not printing",
+        "printer problem"
+      ],
+      "checks": [
+        "printer_reachable",
+        "spooler_status"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Go to the printer. Is it on and awake? Touch the screen or press a button to wake it. Does the panel show it is ready?",
+          "image": "IMG_print_panel_ready"
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Read any message on the panel (paper, toner, door open, jam or a fault code) and tell me exactly what it says."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "On your computer, open the printer's queue and check it isn't set to 'Use Printer Offline'. Windows: Settings > Bluetooth & devices > Printers & scanners. Mac: System Settings > Printers & Scanners."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "If the printer is connected by cable, check the network cable at the back of the printer is firmly in.",
+          "image": "IMG_print_network_port"
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "With your permission I will check your PC can reach the printer and restart the print service."
+        },
+        {
+          "n": 6,
+          "os": "all",
+          "text": "Try another printer from {{PRINTER_LIST_URL}} to learn whether the problem is your PC or this printer."
+        }
+      ],
+      "fixes": [
+        "restart_spooler"
+      ],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Print Team",
+        "priority": "medium",
+        "when": "Printer is on and on the network but still not printing, or the panel shows a fault. Fault codes go to the print vendor."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null,
+      "vendorServiceCall": true
+    },
+    {
+      "id": "print-job-stuck",
+      "title": "Print job stuck in the queue",
+      "category": "Printing",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "print job stuck",
+        "document stuck in queue",
+        "printing stuck",
+        "print queue not clearing",
+        "job deleting",
+        "printing forever",
+        "stuck printing",
+        "cant cancel print"
+      ],
+      "checks": [
+        "spooler_status"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Open the printer's queue and cancel all waiting jobs. Mac: open the printer from Printers & Scanners and delete the jobs."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "If the jobs won't clear, with your permission I will clear the queue and restart the print service (Windows)."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Print a small test page to confirm it works."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "If a particular file keeps jamming the queue, try saving it as a PDF and printing that."
+        }
+      ],
+      "fixes": [
+        "clear_print_queue",
+        "restart_spooler"
+      ],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Print Team",
+        "priority": "low",
+        "when": "Queue keeps freezing."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "print-hardware-status",
+      "title": "Paper jam, toner, or poor print quality",
+      "category": "Printing",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "paper jam",
+        "printer jammed",
+        "toner low",
+        "streaks on print",
+        "print quality bad",
+        "blurry print",
+        "lines on paper",
+        "out of paper",
+        "toner empty",
+        "xerox jam",
+        "canon jam",
+        "printer fault code",
+        "printer error code",
+        "paper no dey enter"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Read the message on the printer panel. Many commercial printers show step-by-step animations of where to open. Follow those."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Safety: some internal parts are hot or moving. Only open the doors and trays the panel tells you to, and never force anything or reach into the machine."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Jam: remove the paper gently in the direction shown, and check no torn pieces remain."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "Paper: load the correct size and type. A wrong paper setting can cause errors."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "Toner, drums, fuser and other parts should be replaced by the trained key operator or the service vendor unless you have been trained."
+        },
+        {
+          "n": 6,
+          "os": "all",
+          "text": "If a fault or service code shows, or streaks and lines continue, write down the code and stop printing so we can log a service call."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Print Team",
+        "priority": "medium",
+        "when": "Fault code, repeat jams, or quality problems. Include printer model, serial number and fault code for the vendor."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null,
+      "vendorServiceCall": true
+    },
+    {
+      "id": "print-add-printer",
+      "title": "Add or install a printer",
+      "category": "Printing",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "add printer",
+        "install printer",
+        "new printer",
+        "printer not showing",
+        "how to connect printer",
+        "setup printer",
+        "driver",
+        "printer driver"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Check {{PRINTER_LIST_URL}} for the approved printers and their names and locations."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Windows: Settings > Bluetooth & devices > Printers & scanners > Add device. Mac: System Settings > Printers & Scanners, then +."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Please don't download drivers from other websites. IT will provide approved ones."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "Print a test page."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "If the printer isn't listed or needs a driver or administrator rights, I will pass this to the Print Team."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Print Team",
+        "priority": "low",
+        "when": "Printer not listed or needs an installer."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "print-held-secure",
+      "title": "Print sent but nothing prints (secure print or account code)",
+      "category": "Printing",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "print release",
+        "secure print",
+        "held job",
+        "enter pin printer",
+        "job waiting at printer",
+        "printed nothing but no error",
+        "account code required",
+        "job accounting",
+        "follow me print"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "If your office uses secure or held printing, your job waits at the printer until you log in or enter a PIN. On the panel look for a section for held, secure or personal jobs (the name varies by model) and release your job."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "If the printer asks for an account or department code, enter the one assigned to your team, or ask your manager."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Check you printed to the right printer name."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "If nothing appears on the panel, we treat it as a printer-offline problem."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Print Team",
+        "priority": "low",
+        "when": "Jobs never appear at the printer."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null,
+      "conditional": "Only applies if your organisation uses this feature; delete or edit otherwise."
+    },
+    {
+      "id": "print-scan-problem",
+      "title": "Scan to email or folder not working",
+      "category": "Printing",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "scan not working",
+        "scan to email failed",
+        "scan to folder",
+        "scanner not sending",
+        "scan to pc",
+        "scanned document not received",
+        "scan no dey go"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Check the destination email address or folder name was entered correctly."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Ask the recipient to check spam and whether their mailbox is full."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "For a large scan, reduce the pages or resolution and try again."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "Tell me any message shown on the printer's panel."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Print Team",
+        "priority": "medium",
+        "when": "Scans still fail with correct destination."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null,
+      "vendorServiceCall": true
+    },
+    {
+      "id": "sw-app-crashing",
+      "title": "Application crashing or not responding",
+      "category": "Software",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "app crashing",
+        "program not opening",
+        "application not responding",
+        "software freezing",
+        "not responding",
+        "program keeps closing",
+        "error message app",
+        "app no dey open"
+      ],
+      "checks": [
+        "disk_free",
+        "uptime"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Tell me the app's name and the exact error message."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Close the app completely and open it again."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Restart the computer."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "I can check free disk space and how long since restart."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "If a web version exists, try that while we look into it."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Software Team",
+        "priority": "medium",
+        "when": "Repeats after restart, or affects several users."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "sw-install-request",
+      "title": "Request or install software",
+      "category": "Software",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "install software",
+        "need software",
+        "request application",
+        "install new program",
+        "license request",
+        "need access to app",
+        "software request"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Check the approved software list at {{SOFTWARE_CATALOG_URL}}."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "If it is listed, install it from {{SELF_SERVICE_APP}}."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "If it isn't listed, I will create a request. You'll need a business reason and manager approval."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "Please don't download installers from the internet."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Software Team",
+        "priority": "low",
+        "when": "Request needs approval and licence."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "sw-update-stuck",
+      "title": "Windows or macOS update stuck or failing",
+      "category": "Software",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "windows update stuck",
+        "update failing",
+        "update not installing",
+        "stuck on updates",
+        "macos update stuck",
+        "update loop",
+        "restart loop update"
+      ],
+      "checks": [
+        "disk_free"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "If the screen says it's working on updates, give it up to an hour before taking action. Powering off during an update can damage the system."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "When it finishes, restart. Windows: Settings > Windows Update > Retry. Mac: System Settings > General > Software Update, with the charger connected."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Updates need free space. I can check how much you have."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "If an error code is shown, write it down and give it to me."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Software Team",
+        "priority": "medium",
+        "when": "Stuck over an hour, error codes, or computer won't start (raise to high)."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "sw-camera-mic-meetings",
+      "title": "Camera or microphone not working in meetings",
+      "category": "Software",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "camera not working teams",
+        "zoom camera",
+        "mic not working in meeting",
+        "cant be heard",
+        "others can't see me",
+        "camera black",
+        "video call problem",
+        "teams camera",
+        "meeting audio"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Check any physical camera cover or shutter, and the mute button on your headset."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "In your meeting app (Teams, Zoom, Meet) open settings and select the right camera and microphone."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Check permissions. Windows: Settings > Privacy & security > Camera / Microphone. Mac: System Settings > Privacy & Security > Camera / Microphone. Make sure the app is allowed."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "Close other apps that may be using the camera."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "Unplug and replug an external webcam or headset firmly."
+        },
+        {
+          "n": 6,
+          "os": "all",
+          "text": "Restart the app, then the computer."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Software Team",
+        "priority": "low",
+        "when": "Still no camera or mic after steps."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "sw-disk-full",
+      "title": "Disk full or low storage",
+      "category": "Software",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "disk full",
+        "storage full",
+        "low disk space",
+        "not enough space",
+        "c drive full",
+        "no space left",
+        "storage almost full",
+        "hard drive full"
+      ],
+      "checks": [
+        "disk_free"
+      ],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Empty the Recycle Bin (Windows) or Trash (Mac)."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Check your Downloads folder for large files you no longer need."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Windows: Settings > System > Storage, then Temporary files. Mac: System Settings > General > Storage."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "With your permission I can clear old temporary files."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "Move large work files to {{FILE_SHARE}} instead of deleting them unless you are sure they are not needed."
+        }
+      ],
+      "fixes": [
+        "clear_user_temp"
+      ],
+      "verifyWith": "disk_free",
+      "escalate": {
+        "team": "Hardware Team",
+        "priority": "low",
+        "when": "Disk too small and needs upgrade or cleanup."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "sec-phishing",
+      "title": "Suspicious email or link",
+      "category": "Security",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "phishing",
+        "suspicious email",
+        "scam email",
+        "fake email",
+        "spam email",
+        "strange link",
+        "clicked a link",
+        "i clicked a link",
+        "suspicious attachment",
+        "email asking for password",
+        "fake invoice",
+        "ceo fraud",
+        "whatsapp scam"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Don't click links, open attachments, or reply."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Report it using the Report Phishing button, or forward it as an attachment to {{SECURITY_EMAIL}}."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "If you already clicked a link or typed your password, change your password now, from a different trusted device if possible, and tell me so I can raise this as urgent."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "If you opened a file, disconnect from the network (unplug the cable or turn off Wi-Fi) and stop using the computer until the Security Team responds.",
+          "image": "IMG_sec_unplug"
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Security Team",
+        "priority": "high",
+        "when": "Critical if credentials were entered or a file was opened."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "sec-virus",
+      "title": "Suspected virus or ransomware",
+      "category": "Security",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "virus",
+        "malware",
+        "ransomware",
+        "computer infected",
+        "popups",
+        "files encrypted",
+        "antivirus alert",
+        "hacked",
+        "strange behaviour",
+        "ransom note",
+        "files locked"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Disconnect from the network now: unplug the network cable or turn off Wi-Fi.",
+          "image": "IMG_sec_unplug"
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Leave the computer as it is and don't restart or shut it down unless the Security Team tells you to."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "Don't pay or reply to any message on screen. Take a photo of the screen with your phone."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "Don't plug in USB drives or sign in to any accounts on this computer."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "Call {{HELPDESK_PHONE}} now, because chat won't work without a network."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Security Team",
+        "priority": "critical",
+        "when": "Always escalate immediately."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "sec-lost-device",
+      "title": "Lost or stolen device",
+      "category": "Security",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "lost laptop",
+        "stolen laptop",
+        "lost phone",
+        "stolen device",
+        "laptop missing",
+        "misplaced laptop",
+        "device stolen"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Tell me when and where it was lost, what device it was, and the asset tag if you know it."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "Change your password from another device using {{SELF_SERVICE_RESET_URL}}."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "The Security Team may lock or wipe the device remotely."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "If it was stolen, report it to the police and your manager per company policy."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Security Team",
+        "priority": "critical",
+        "when": "Always escalate immediately."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "support-remote-session",
+      "title": "Remote help request",
+      "category": "Support",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "remote help",
+        "remote support",
+        "take over my pc",
+        "can you fix my pc remotely",
+        "remote access",
+        "share my screen",
+        "quick assist",
+        "screen sharing support"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Consent: 'May a support technician view your screen, and control it only if you allow? You can stop at any time.' The user must click a consent button. Spoken 'yes' alone is not accepted."
+        },
+        {
+          "n": 2,
+          "os": "windows",
+          "text": "Windows: the technician opens Quick Assist, chooses to help someone, and gets a 6-digit code. The app shows that code to you. Press Ctrl+Windows key+Q, choose 'Get help', and type the code."
+        },
+        {
+          "n": 3,
+          "os": "mac",
+          "text": "Mac: use the approved tool {{MAC_REMOTE_TOOL}} and follow the on-screen prompts."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "Click Allow when your computer asks. You will see when the session is active and can end it at any time."
+        },
+        {
+          "n": 5,
+          "os": "all",
+          "text": "Close confidential windows and files before the session starts."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Service Desk",
+        "priority": "medium",
+        "when": "Technician connects only after the consent record is saved."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    },
+    {
+      "id": "support-human-handoff",
+      "title": "Talk to a person",
+      "category": "Support",
+      "os": [
+        "windows",
+        "mac"
+      ],
+      "keywords": [
+        "speak to human",
+        "talk to a person",
+        "call it",
+        "need technician",
+        "agent please",
+        "human",
+        "real person",
+        "i need help from it staff",
+        "escalate",
+        "none of these",
+        "i wan talk to person"
+      ],
+      "checks": [],
+      "steps": [
+        {
+          "n": 1,
+          "os": "all",
+          "text": "Of course. I'll create a ticket with everything we've done so you don't have to repeat yourself."
+        },
+        {
+          "n": 2,
+          "os": "all",
+          "text": "I'll confirm your name, staff ID, computer name, location, a phone number, and whether others are affected."
+        },
+        {
+          "n": 3,
+          "os": "all",
+          "text": "You'll get a ticket number by email."
+        },
+        {
+          "n": 4,
+          "os": "all",
+          "text": "If it is urgent (nobody can work, or it's a security matter), also call {{HELPDESK_PHONE}}."
+        }
+      ],
+      "fixes": [],
+      "verifyWith": null,
+      "escalate": {
+        "team": "Service Desk",
+        "priority": "medium",
+        "when": "Always."
+      },
+      "status": "draft",
+      "owner": null,
+      "lastReviewed": null
+    }
+  ]
+}

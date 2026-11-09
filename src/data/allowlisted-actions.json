@@ -1,0 +1,146 @@
+{
+  "meta": {
+    "note": "Read-only checks and consent-gated fixes. The bot may only run what is listed here. Sign every script, test on pilot machines, and verify service names and commands for your versions before use."
+  },
+  "checks": {
+    "adapter_link_state": {
+      "desc": "Is the network adapter connected (cable detected / Wi-Fi associated)?",
+      "win": "Get-NetAdapter | Select Name,Status,LinkSpeed,MediaType",
+      "mac": "networksetup -listallhardwareports ; ifconfig en0 | grep status"
+    },
+    "ip_config_valid": {
+      "desc": "Did the PC receive a valid IP address (not a 169.254.x.x self-assigned one)?",
+      "win": "Get-NetIPConfiguration",
+      "mac": "ipconfig getifaddr en0 ; ipconfig getifaddr en1"
+    },
+    "ping_gateway": {
+      "desc": "Can the PC reach its default gateway (router/switch)?",
+      "win": "Test-Connection (Get-NetRoute -DestinationPrefix 0.0.0.0/0).NextHop -Count 2",
+      "mac": "ping -c 2 $(route -n get default | awk '/gateway/{print $2}')"
+    },
+    "ping_internet_ip": {
+      "desc": "Can the PC reach an outside IP address? Target is configurable ({{PING_TARGET}}) because some networks block ICMP.",
+      "win": "Test-Connection {{PING_TARGET}} -Count 2",
+      "mac": "ping -c 2 {{PING_TARGET}}"
+    },
+    "dns_resolve": {
+      "desc": "Can the PC translate a website name into an address?",
+      "win": "Resolve-DnsName example.com",
+      "mac": "dscacheutil -q host -a name example.com"
+    },
+    "wifi_signal": {
+      "desc": "Wi-Fi signal strength and connected network name.",
+      "win": "netsh wlan show interfaces",
+      "mac": "Not scripted: ask the user to read the Wi-Fi menu (or use an MDM-approved method)"
+    },
+    "vpn_client_status": {
+      "desc": "Is the Cisco Secure Client VPN service running? Verify the exact service/process names for the version you deploy.",
+      "win": "Get-Service csc_vpnagent,vpnagent -ErrorAction SilentlyContinue",
+      "mac": "pgrep -fl vpnagent"
+    },
+    "time_drift": {
+      "desc": "Is the clock close to the correct time? (Wrong clocks break sign-in and certificates.)",
+      "win": "w32tm /query /status",
+      "mac": "Ask user to confirm 'Set time and date automatically' is on; reading it may need admin rights"
+    },
+    "disk_free": {
+      "desc": "Free space on the system drive.",
+      "win": "Get-PSDrive C | Select Used,Free",
+      "mac": "df -h /"
+    },
+    "uptime": {
+      "desc": "Days since last restart.",
+      "win": "(Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime",
+      "mac": "sysctl -n kern.boottime"
+    },
+    "printer_reachable": {
+      "desc": "Can the PC reach the printer's IP address? Printer IP comes from your printer list.",
+      "win": "Test-NetConnection {{PRINTER_IP}} -Port 9100",
+      "mac": "ping -c 2 {{PRINTER_IP}}"
+    },
+    "spooler_status": {
+      "desc": "Is the Windows print service running?",
+      "win": "Get-Service Spooler",
+      "mac": "Not applicable (macOS uses CUPS): lpstat -p"
+    }
+  },
+  "fixes": {
+    "flush_dns": {
+      "risk": "low",
+      "admin": {
+        "win": false,
+        "mac": true
+      },
+      "consent": "I'd like to clear your computer's saved website-address cache. This is safe and nothing is deleted from your files. OK?",
+      "win": "ipconfig /flushdns",
+      "mac": "sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder",
+      "note": "Mac needs admin rights, so run only through an approved admin mechanism."
+    },
+    "renew_ip": {
+      "risk": "low",
+      "admin": {
+        "win": true,
+        "mac": true
+      },
+      "consent": "I'd like to renew your network address. Your connection will drop for a few seconds. OK?",
+      "win": "ipconfig /release; ipconfig /renew",
+      "mac": "Ask the user to toggle Wi-Fi off/on, or use an approved MDM action",
+      "note": "Will briefly disconnect the user, including from this chat."
+    },
+    "restart_adapter": {
+      "risk": "medium",
+      "admin": {
+        "win": true,
+        "mac": true
+      },
+      "consent": "I'd like to restart your network adapter. You will lose connection for a few seconds. OK?",
+      "win": "Restart-NetAdapter -Name '{{ADAPTER_NAME}}'",
+      "mac": "Ask the user to toggle Wi-Fi off/on",
+      "note": "Adapter name comes from the adapter_link_state check."
+    },
+    "restart_spooler": {
+      "risk": "low",
+      "admin": {
+        "win": true,
+        "mac": false
+      },
+      "consent": "I'd like to restart the Windows print service. Waiting print jobs may need to be sent again. OK?",
+      "win": "Restart-Service Spooler",
+      "mac": "Not applicable",
+      "note": ""
+    },
+    "clear_print_queue": {
+      "risk": "medium",
+      "admin": {
+        "win": true,
+        "mac": false
+      },
+      "consent": "I'd like to cancel ALL waiting print jobs on your computer and restart the print service. You'll need to print again. OK?",
+      "win": "Stop-Service Spooler -Force; Remove-Item 'C:\\Windows\\System32\\spool\\PRINTERS\\*' -Force -ErrorAction SilentlyContinue; Start-Service Spooler",
+      "mac": "cancel -a",
+      "note": "Cancels jobs only on this computer. Does not touch the printer's own stored jobs."
+    },
+    "sync_time": {
+      "risk": "low",
+      "admin": {
+        "win": true,
+        "mac": true
+      },
+      "consent": "I'd like to re-sync your computer's clock with the company time server. OK?",
+      "win": "w32tm /resync",
+      "mac": "Ask the user to turn on 'Set time and date automatically' in System Settings",
+      "note": "A wrong clock can break VPN and sign-in."
+    },
+    "clear_user_temp": {
+      "risk": "low",
+      "admin": {
+        "win": false,
+        "mac": false
+      },
+      "consent": "I'd like to delete temporary files older than 3 days from your user profile. Your documents are not touched. OK?",
+      "win": "Get-ChildItem $env:TEMP -Recurse -Force -ErrorAction SilentlyContinue | Where-Object LastWriteTime -lt (Get-Date).AddDays(-3) | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+      "mac": "Not scripted: guide the user through System Settings > General > Storage",
+      "note": "Report how much space was freed."
+    }
+  }
+}
