@@ -9,6 +9,7 @@ import { supabase } from "./supabase";
 import VirtualITSupport from "./components/VirtualITSupport";
 import ProactiveBanner from "./components/ProactiveBanner";
 import AuthScreen from "./components/AuthScreen";
+import LandingPage from "./components/LandingPage";
 import NotificationBell from "./components/NotificationBell";
 import LiveClock from "./components/LiveClock";
 import { playNotificationChime } from "./engine/soundEffects";
@@ -125,6 +126,23 @@ export default function HelpdeskAI() {
   const [authChecked, setAuthChecked] = useState(false);
   // Platform Master Workspace ID (resolved once on login for individual users)
   const [masterOrgId, setMasterOrgId] = useState(null);
+
+  // Marketing Landing Page vs Auth View for public visitors
+  // Shows AuthScreen when URL contains auth parameters (recovery, signup confirmation, etc) or #login
+  const [showAuthScreen, setShowAuthScreen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const hash = window.location.hash || "";
+    const search = window.location.search || "";
+    return (
+      hash.includes("access_token") || 
+      hash.includes("type=recovery") || 
+      hash.includes("type=signup") || 
+      hash.includes("type=invite") ||
+      search.includes("code=") ||
+      hash === "#login" ||
+      search.includes("login=true")
+    );
+  });
 
   // In-App Notification Center
   const [notifications, setNotifications] = useState([
@@ -1310,12 +1328,21 @@ export default function HelpdeskAI() {
   }
 
   if (!currentUser) {
+    if (showAuthScreen) {
+      return (
+        <AuthScreen
+          onAuthSuccess={(user) => {
+            setCurrentUser(user);
+            fetchProfile(user);
+          }}
+          onBackToLanding={() => setShowAuthScreen(false)}
+        />
+      );
+    }
+
     return (
-      <AuthScreen
-        onAuthSuccess={(user) => {
-          setCurrentUser(user);
-          fetchProfile(user);
-        }}
+      <LandingPage
+        onGoToApp={() => setShowAuthScreen(true)}
       />
     );
   }

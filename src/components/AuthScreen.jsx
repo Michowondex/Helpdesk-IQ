@@ -33,7 +33,7 @@ const isConsumerEmail = (email) => {
   return FREE_EMAIL_DOMAINS.includes(domain);
 };
 
-export default function AuthScreen({ onAuthSuccess }) {
+export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [accountType, setAccountType] = useState("business"); // 'business' | 'individual'
   const [isForgotPassword, setIsForgotPassword] = useState(false);
@@ -209,6 +209,15 @@ export default function AuthScreen({ onAuthSuccess }) {
       <div className="w-full max-w-md relative z-10">
         {/* Logo and Brand */}
         <div className="flex flex-col items-center mb-6">
+          {onBackToLanding && (
+            <button
+              type="button"
+              onClick={onBackToLanding}
+              className="self-start mb-3 flex items-center gap-1.5 text-xs text-slate-400 hover:text-indigo-400 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" /> Back to Home
+            </button>
+          )}
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-400 flex items-center justify-center text-white shadow-xl shadow-indigo-500/20 mb-3">
             <Bot className="w-7 h-7" />
           </div>
