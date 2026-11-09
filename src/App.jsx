@@ -308,7 +308,9 @@ export default function HelpdeskAI() {
       // For individual users: also fetch global KB articles from the Master Org (bizadoc.com)
       // so they benefit from all published help articles without being part of that workspace.
       let allArticles = kb || [];
-      const isIndividual = currentUserProfile?.account_type === "individual";
+      const isIndividual = 
+        currentUserProfile?.account_type === "individual" ||
+        currentUser?.user_metadata?.account_type === "individual";
       if (isIndividual) {
         const mOrgId = masterOrgId || await resolveMasterOrgId();
         if (mOrgId && mOrgId !== activeOrgId) {
@@ -461,7 +463,8 @@ export default function HelpdeskAI() {
           role: assignedRole,
           full_name: user.user_metadata?.full_name || user.email.split("@")[0],
           email: user.email,
-          department: user.user_metadata?.department || (assignedRole === "admin" ? "IT Administration" : "General IT")
+          department: user.user_metadata?.department || (assignedRole === "admin" ? "IT Administration" : "General IT"),
+          account_type: user.user_metadata?.account_type || "business"  // persist so tab-gating works on every login
         };
 
         try {
@@ -899,7 +902,9 @@ export default function HelpdeskAI() {
     // Individual users don't belong to a business org — route their tickets to
     // the Platform Master Workspace (bizadoc.com) so the owner's technicians
     // handle all public support requests in one place.
-    const isIndividualUser = currentUserProfile?.account_type === "individual";
+    const isIndividualUser = 
+      currentUserProfile?.account_type === "individual" ||
+      currentUser?.user_metadata?.account_type === "individual";
     let targetOrgId = orgConfig?.id || currentUserProfile?.org_id || null;
     if (isIndividualUser) {
       const mOrgId = masterOrgId || await resolveMasterOrgId();
@@ -1257,9 +1262,12 @@ export default function HelpdeskAI() {
     );
   });
 
-  // Individual account type — personal users only see Virtual IT Support and their own tickets.
-  // Business accounts see all tabs gated by their role (admin / technician / user).
-  const isIndividualAccount = currentUserProfile?.account_type === "individual";
+  // Individual account type — check profile table first, fall back to Supabase Auth metadata.
+  // The metadata fallback ensures accounts created before the account_type column was added
+  // to the profiles table still get the correct individual-only interface.
+  const isIndividualAccount =
+    currentUserProfile?.account_type === "individual" ||
+    currentUser?.user_metadata?.account_type === "individual";
 
   const allNavItems = [
     { id: "virtual-it", label: "Virtual IT Support", icon: Bot, roles: ["admin", "technician", "user"] },
@@ -1458,7 +1466,11 @@ export default function HelpdeskAI() {
             customArticles={customArticles}
             orgConfig={orgConfig}
             userRole={userRole}
-            accountType={currentUserProfile?.account_type || "business"}
+            accountType={
+              currentUserProfile?.account_type ||
+              currentUser?.user_metadata?.account_type ||
+              "business"
+            }
             currentUser={currentUser}
             currentUserProfile={currentUserProfile}
             onSubmitTicket={submitTicket}
