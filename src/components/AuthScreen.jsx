@@ -165,6 +165,15 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
 
         if (error) throw error;
 
+        // Duplicate Email Detection when Supabase Email Enumeration Protection is enabled
+        // Supabase returns an empty identities array if the email already exists in auth.users
+        if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+          setErrorMsg("An account with this email already exists. Please sign in or use 'Forgot password' if you need to recover access.");
+          setIsSignUp(false); // Switch to sign in view so user can log in immediately
+          setLoading(false);
+          return;
+        }
+
         // Check if session was returned immediately (if email confirmation is turned off in dev)
         if (data?.session) {
           onAuthSuccess(data.session.user);
