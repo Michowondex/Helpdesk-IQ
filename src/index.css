@@ -417,3 +417,25 @@ input, select, textarea {
 .overflow-hidden { overflow: hidden; }
 .overflow-x-auto { overflow-x: auto; }
 .overflow-y-auto { overflow-y: auto; }
+
+/* ── Hide Netlify injected badge / feedback drawer ── */
+#netlify-badge,
+.netlify-badge,
+[class*="netlify-badge"],
+[id*="netlify-badge"],
+netlify-drawer,
+[data-netlify-drawer],
+iframe[title*="Netlify"],
+iframe[src*="netlify"],
+div[class*="netlify-feedback"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  top: -9999px !important;
+  left: -9999px !important;
+  width: 0 !important;
+  height: 0 !important;
+  z-index: -9999 !important;
+}

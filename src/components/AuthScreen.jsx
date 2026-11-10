@@ -50,7 +50,7 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
   // hCaptcha state & ref
   const [captchaToken, setCaptchaToken] = useState("");
   const captchaRef = useRef(null);
-  const HCAPTCHA_SITE_KEY = import.meta.env.VITE_HCAPTCHA_SITE_KEY || "";
+  const HCAPTCHA_SITE_KEY = import.meta.env.VITE_HCAPTCHA_SITE_KEY || "9b20e012-e932-413c-ac42-37a637d4ad82";
   
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
