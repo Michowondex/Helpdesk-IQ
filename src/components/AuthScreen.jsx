@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
+import HCaptcha from "@hcaptcha/react-hcaptcha";
 import { 
   Bot, Lock, Mail, ArrowRight, ShieldCheck, UserCheck, AlertCircle, 
   Sparkles, Eye, EyeOff, KeyRound, ChevronLeft, Building2, User, 
@@ -40,8 +41,16 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
   
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [fullName, setFullName] = useState("");
   const [companyName, setCompanyName] = useState("");
+  
+  // hCaptcha state & ref
+  const [captchaToken, setCaptchaToken] = useState("");
+  const captchaRef = useRef(null);
+  const HCAPTCHA_SITE_KEY = import.meta.env.VITE_HCAPTCHA_SITE_KEY || "";
   
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -78,6 +87,25 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
     setErrorMsg("");
     setInfoMsg("");
     setDuplicateBlockMsg("");
+
+    // ── Client-side validation ──────────────────────────────────────────
+    if (isSignUp) {
+      if (password.length < 8) {
+        setErrorMsg("Password must be at least 8 characters long.");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setErrorMsg("Passwords do not match. Please verify your password.");
+        return;
+      }
+    }
+
+    // Require captcha verification if hCaptcha site key is configured
+    if (HCAPTCHA_SITE_KEY && !captchaToken) {
+      setErrorMsg("Please complete the security captcha verification below.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -154,6 +182,7 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
           password,
           options: {
             emailRedirectTo: redirectUrl,
+            captchaToken: captchaToken || undefined,
             data: {
               full_name: fullName.trim() || cleanEmail.split("@")[0],
               company_name: finalCompanyName,
@@ -185,7 +214,10 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
         // Sign In Existing User
         const { data, error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
-          password
+          password,
+          options: {
+            captchaToken: captchaToken || undefined
+          }
         });
 
         if (error) throw error;
@@ -195,6 +227,11 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
       }
     } catch (err) {
       setErrorMsg(err.message || "Authentication failed");
+      // Reset captcha on failure so user can retry cleanly
+      if (captchaRef.current) {
+        captchaRef.current.resetCaptcha();
+      }
+      setCaptchaToken("");
     } finally {
       setLoading(false);
     }
@@ -475,17 +512,30 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Password</label>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-xs font-medium text-slate-300">Password</label>
+                    {isSignUp && (
+                      <span className="text-[10px] text-slate-500">Min. 8 characters</span>
+                    )}
+                  </div>
                   <div className="relative">
                     <input
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       required
+                      minLength={8}
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none transition-colors"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none transition-colors"
                     />
                     <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-3 text-slate-500 hover:text-slate-300 transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
                   {!isSignUp && (
                     <div className="text-right mt-1.5">
@@ -499,6 +549,60 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
                     </div>
                   )}
                 </div>
+
+                {/* ── Confirm Password Field (Registration Mode Only) ── */}
+                {isSignUp && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5">Confirm Password *</label>
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        required
+                        minLength={8}
+                        placeholder="••••••••"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className={`w-full bg-slate-950 border rounded-xl pl-9 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors ${
+                          confirmPassword && password !== confirmPassword
+                            ? "border-rose-500/80 focus:border-rose-400"
+                            : confirmPassword && password === confirmPassword
+                            ? "border-emerald-500/80 focus:border-emerald-400"
+                            : "border-slate-800 focus:border-indigo-500"
+                        }`}
+                      />
+                      <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-3 text-slate-500 hover:text-slate-300 transition-colors"
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {confirmPassword && password !== confirmPassword && (
+                      <p className="text-[10px] text-rose-400 mt-1">Passwords do not match.</p>
+                    )}
+                    {confirmPassword && password === confirmPassword && (
+                      <p className="text-[10px] text-emerald-400 mt-1 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Passwords match!
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* ── hCaptcha Anti-Bot Security Widget ── */}
+                {HCAPTCHA_SITE_KEY && (
+                  <div className="pt-2 flex justify-center">
+                    <HCaptcha
+                      ref={captchaRef}
+                      sitekey={HCAPTCHA_SITE_KEY}
+                      onVerify={(token) => setCaptchaToken(token)}
+                      onExpire={() => setCaptchaToken("")}
+                      theme="dark"
+                      size="normal"
+                    />
+                  </div>
+                )}
 
                 <button
                   type="submit"
