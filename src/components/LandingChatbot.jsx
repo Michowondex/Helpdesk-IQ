@@ -3,6 +3,18 @@ import { useState, useRef, useEffect } from "react";
 const WHATSAPP_LINK = "https://wa.me/2349162029201?text=Hello%20BizaDesk%20Team%2C%20I%20have%20an%20inquiry%20about%20your%20IT%20support%20services.";
 const MAX_AI_QUERIES = 5;
 
+function renderFormattedText(text) {
+  if (!text) return "";
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length >= 4) {
+      const inner = part.slice(2, -2);
+      return <strong key={i} style={{ color: "#ffffff", fontWeight: 700 }}>{inner}</strong>;
+    }
+    return part.replace(/\*\*/g, "");
+  });
+}
+
 const PROBLEM_TOPICS = [
   {
     id: "wifi",
@@ -172,6 +184,7 @@ Key facts:
 - Features: 24/7 Virtual IT Assistant, Windows Quick Assist remote sessions, ticket tracking, service monitoring, knowledge base.
 - Contact: WhatsApp/Hotline +234 916 202 9201, Email helpdesk@bizadoc.com.
 - Free trial: 30 days free, no credit card required.
+Formatting rule: Do NOT use markdown asterisks (**) anywhere in your response. Write in clean plain text with standard bullet points (•).
 Keep answers concise (2-4 sentences max), clear, and encourage the visitor to start a free trial or contact on WhatsApp.`
             },
             { role: "user", content: query }
@@ -249,7 +262,7 @@ Keep answers concise (2-4 sentences max), clear, and encourage the visitor to st
               <div key={idx} className={`bd-chat-msg-row ${m.sender === "user" ? "user" : "bot"}`}>
                 {m.sender === "bot" && <div className="bd-chat-msg-avatar">⚡</div>}
                 <div className={`bd-chat-bubble ${m.sender === "user" ? "user" : "bot"}`}>
-                  <div style={{ whiteSpace: "pre-wrap" }}>{m.text}</div>
+                  <div style={{ whiteSpace: "pre-wrap" }}>{renderFormattedText(m.text)}</div>
 
                   {/* Optional Action CTAs */}
                   {m.showCta && (
