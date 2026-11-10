@@ -1,20 +1,23 @@
 /**
  * BizaDesk landing page (React 19 / Vite)
  *
- * INSTRUCTIONS FOR THE CODING AGENT
- * 1. Place LandingPage.jsx and landing.css in the same folder (e.g. src/pages/).
- * 2. Render <LandingPage /> on the public route "/" (or wherever the marketing page should live).
- *    The app itself stays at https://desk.bizadoc.com, every CTA already links there via APP_URL.
- * 3. No new dependencies. No Tailwind needed: all styles are in landing.css and
- *    scoped under the .bd wrapper, so they cannot affect the rest of the app.
- *    landing.css uses native CSS nesting (supported by Vite and all current browsers).
- * 4. Dark mode only. Do not add a light theme.
- * 5. Keep copy, pricing and contact details exactly as written below.
- *    Edit the data arrays (FEATURES, PLANS, etc.) rather than the JSX when content changes.
+ * Integrated with:
+ * - Real imagery (images/ folder)
+ * - Interactive Visuals (Visuals.jsx)
+ * - Customer Trust Badges
+ * - Interactive Hybrid IT Assistant Chatbot (LandingChatbot.jsx)
+ * - Seamless in-app onboarding integration via onGoToApp prop
  */
 import { useState } from 'react'
 import './landing.css'
+import { ChatVisual, TicketVisual, EscalationVisual, MonitorVisual } from './Visuals'
 import LandingChatbot from './LandingChatbot'
+import imgOfficer from './images/it-officer.jpg'
+import imgStudent from './images/student.jpg'
+import imgRemote from './images/remote-worker.jpg'
+import imgSupport from './images/support-agent.jpg'
+import imgMonitor from './images/monitoring.jpg'
+import imgTeam from './images/happy-team.jpg'
 
 const APP_URL = 'https://desk.bizadoc.com'
 
@@ -28,6 +31,19 @@ const FEATURES = [
   ['👥', 'Team & User Management', 'Add technicians and staff in seconds with Admin, Technician and Staff roles, department assignment and password resets from the dashboard.'],
   ['💳', 'Payments & Refunds', 'Paystack checkout for individuals, one-click 100% refunds from the ticket, and business billing in NGN (Paystack) or USD (Stripe).'],
   ['🔐', 'Security & Audit', 'Full audit log with CSV export, XSS-safe inputs and database-level Row-Level Security so tenants can never see each other’s data.'],
+]
+
+const PROBLEMS = [
+  [imgOfficer, 'IT support by chasing', 'One officer, many floors. Follow-ups, status calls and “any update?” messages eat the day, and every P1 turns into a phone marathon.'],
+  [imgStudent, 'Stranded at midnight', 'Students and individuals get stuck when a laptop fails, with a deadline closing in and nobody to call.'],
+  [imgRemote, 'Remote work, no safety net', 'Freelancers and remote workers have no IT desk. When the Wi-Fi or VPN drops mid-call, they are on their own.'],
+]
+
+const TOUR = [
+  [ChatVisual, 'Virtual IT Assistant', 'Fixes before tickets exist.', 'Staff and individuals type or speak the problem and get step-by-step help, any hour. Stuck? Escalate to WhatsApp, a call or a ticket in one tap.'],
+  [TicketVisual, 'Smart Tickets', 'Everyone stays in the loop, automatically.', 'Open, In Progress, Resolved, with instant notifications at every change. Staff see their own tickets, technicians see theirs, admins see it all. Technicians can even start a Quick Assist session from the ticket chat.'],
+  [EscalationVisual, 'Auto-Escalation', 'No more chasing for updates.', 'When an incident is critical or an SLA is about to break, BizaDesk alerts everyone and emails all-staff and IT managers for you. The follow-up runs itself.'],
+  [MonitorVisual, 'Live Monitoring', 'Know before your users do.', 'Email, VPN, internet and internal tools are watched in real time. When something goes offline, an incident is created and the alerts go out immediately.'],
 ]
 
 const STATS = [
@@ -131,7 +147,7 @@ export default function LandingPage({ onGoToApp }) {
       e.preventDefault();
       onGoToApp();
     }
-  };
+  }
 
   return (
     <div className="bd" id="top">
@@ -186,6 +202,40 @@ export default function LandingPage({ onGoToApp }) {
         </div>
       </header>
 
+      <section id="problem">
+        <div className="wrap">
+          <div className="hd">
+            <span className="eyebrow">The problem</span>
+            <h2>IT support shouldn’t depend on who has time to chase</h2>
+            <p>Whether you run a business or just own a laptop, the story is the same: something breaks, and help is slow.</p>
+          </div>
+          <div className="prob">
+            {PROBLEMS.map(([ic, t, d]) => (
+              <div className="pcard" key={t}>
+                <img className="shot" src={ic} alt={t} loading="lazy" />
+                <h3>{t}</h3>
+                <p>{d}</p>
+              </div>
+            ))}
+          </div>
+          <div className="fix">BizaDesk fixes all three. <span>Automatically.</span></div>
+        </div>
+      </section>
+
+      <section id="tour" style={{ paddingTop: 20 }}>
+        <div className="wrap">
+          <div className="hd"><span className="eyebrow">See it in action</span><h2>Your IT desk, working while you don’t</h2></div>
+          <div className="tour">
+            {TOUR.map(([Vis, eb, h, d], i) => (
+              <div className={`row${i % 2 ? ' rev' : ''}`} key={eb}>
+                <div className="txt"><span className="eyebrow">{eb}</span><h3>{h}</h3><p>{d}</p></div>
+                <Vis />
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section style={{ paddingTop: 70 }}>
         <div className="wrap">
           <div className="stats">
@@ -227,6 +277,7 @@ export default function LandingPage({ onGoToApp }) {
           <div className="hd"><span className="eyebrow">Who it’s for</span><h2>One platform, two ways to get help</h2></div>
           <div className="two">
             <div className="aud">
+              <img className="shot" src={imgMonitor} alt="IT team monitoring services on a live dashboard" loading="lazy" />
               <h3>Businesses</h3>
               <p>Register a workspace, onboard your IT team, and let staff raise tickets internally.</p>
               <ul className="ck">
@@ -237,6 +288,7 @@ export default function LandingPage({ onGoToApp }) {
               </ul>
             </div>
             <div className="aud e">
+              <img className="shot" src={imgSupport} alt="Technician giving remote IT support over video" loading="lazy" />
               <h3>Individuals</h3>
               <p>Home or personal IT trouble? Pay only when you need a hand.</p>
               <ul className="ck">
@@ -275,6 +327,7 @@ export default function LandingPage({ onGoToApp }) {
       <section style={{ paddingBottom: 0 }}>
         <div className="wrap">
           <div className="final">
+            <img className="shot" src={imgTeam} alt="Happy team after their IT issue is solved" loading="lazy" />
             <h2>Give your team an IT desk that never sleeps.</h2>
             <p>Join businesses already resolving incidents faster. Your 30-day trial starts in a minute, no card needed.</p>
             <a className="btn p" href={APP_URL} onClick={handleCtaClick} style={{ fontSize: 16, padding: '15px 30px' }}>Start Free Trial →</a>
