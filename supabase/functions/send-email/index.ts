@@ -42,7 +42,7 @@ serve(async (req) => {
     // 2. Or from environment variable RESEND_API_KEY (platform-level secret)
     // 3. Or query organizations table by orgId (tenant-level key)
     let effectiveApiKey = apiKey || Deno.env.get("RESEND_API_KEY");
-    let effectiveFrom = fromEmail || "onboarding@resend.dev";
+    let effectiveFrom = fromEmail || "BizaDesk <helpdesk@bizadoc.com>";
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
