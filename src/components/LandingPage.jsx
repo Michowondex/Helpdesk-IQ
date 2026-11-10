@@ -14,6 +14,7 @@
  */
 import { useState } from 'react'
 import './landing.css'
+import LandingChatbot from './LandingChatbot'
 
 const APP_URL = 'https://desk.bizadoc.com'
 
@@ -75,7 +76,13 @@ const SERVICES = [
   ['Internet link', '#10b981', 'Online'],
 ]
 
-const BUILT_WITH = ['React', 'Supabase', 'Paystack', 'Stripe', 'Resend', 'Tailwind CSS']
+const TRUST_BADGES = [
+  '🔒 Bank-Grade 256-Bit SSL',
+  '💳 PCI-DSS Certified Payments',
+  '⚡ 99.9% Monitored Uptime SLA',
+  '🛡️ 100% Money-Back Guarantee',
+  '🇳🇬 Dedicated Local & Remote Support'
+]
 
 function Logo({ style }) {
   return (
@@ -261,7 +268,7 @@ export default function LandingPage({ onGoToApp }) {
             <span>30-day free trial</span><span>No credit card required</span>
             <span>20% off annual billing</span><span>PCI-DSS compliant payments</span>
           </div>
-          <div className="built">{BUILT_WITH.map((b) => <span key={b}>{b}</span>)}</div>
+          <div className="built">{TRUST_BADGES.map((b) => <span key={b}>{b}</span>)}</div>
         </div>
       </section>
 
@@ -288,6 +295,9 @@ export default function LandingPage({ onGoToApp }) {
           <div>Office hours: Mon–Fri, 8am–6pm WAT<br />WhatsApp support: 24/7</div>
         </div>
       </footer>
+
+      {/* Floating Interactive Hybrid IT Assistant */}
+      <LandingChatbot onGoToApp={onGoToApp} />
     </div>
   )
 }
