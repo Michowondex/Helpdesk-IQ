@@ -172,8 +172,9 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
     setResetLoading(true);
     setResetSent(false);
     try {
+      const redirectUrl = import.meta.env.VITE_APP_URL || window.location.origin;
       const { error } = await supabase.auth.resetPasswordForEmail(resetTarget.email, {
-        redirectTo: window.location.origin,
+        redirectTo: redirectUrl,
       });
       if (error) throw error;
       setResetSent(true);
