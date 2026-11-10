@@ -178,7 +178,7 @@ export default function BillingSubscription({ subscription = {}, onUpgradePlan }
           <div>
             <h3 className="text-sm font-bold text-slate-100">Need Help? Contact Platform Support</h3>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Billing questions, enterprise onboarding, or feature requests — reach the HelpDeskIQ team directly.
+              Billing questions, enterprise onboarding, or feature requests — reach the BizaDesk team directly.
             </p>
           </div>
         </div>
@@ -186,7 +186,7 @@ export default function BillingSubscription({ subscription = {}, onUpgradePlan }
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {/* WhatsApp */}
           <a
-            href="https://wa.me/2349162029201?text=Hello%20HelpDeskIQ%20Team%2C%20I%20need%20assistance%20with%20my%20business%20subscription."
+            href="https://wa.me/2349162029201?text=Hello%20BizaDesk%20Team%2C%20I%20need%20assistance%20with%20my%20business%20subscription."
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-3 bg-emerald-900/30 hover:bg-emerald-900/50 border border-emerald-700/40 hover:border-emerald-600/60 rounded-lg p-3 transition-all group"
@@ -212,7 +212,7 @@ export default function BillingSubscription({ subscription = {}, onUpgradePlan }
 
           {/* Email */}
           <a
-            href="mailto:helpdesk@bizadoc.com?subject=HelpDeskIQ%20Business%20Inquiry"
+            href="mailto:helpdesk@bizadoc.com?subject=BizaDesk%20Business%20Inquiry"
             className="flex items-center gap-3 bg-slate-800/60 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-lg p-3 transition-all group"
           >
             <Mail className="w-5 h-5 text-sky-400 shrink-0" />

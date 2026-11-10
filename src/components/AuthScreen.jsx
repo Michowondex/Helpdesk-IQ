@@ -144,7 +144,7 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
           if (!checkError && existingOrgs && existingOrgs.length > 0) {
             const matchedOrg = existingOrgs[0];
             setDuplicateBlockMsg(
-              `"${matchedOrg.name}" is already registered on HelpDeskIQ. To protect company security, new accounts cannot be self-registered under this company. Please reach out directly to your company's IT Administrator to receive an invitation.`
+              `"${matchedOrg.name}" is already registered on BizaDesk. To protect company security, new accounts cannot be self-registered under this company. Please reach out directly to your company's IT Administrator to receive an invitation.`
             );
             setLoading(false);
             return;

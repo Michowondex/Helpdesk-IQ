@@ -92,7 +92,7 @@ export default function CompanySettings({
     const senderName = currentUserProfile?.full_name || form.name || "Customer Admin";
     const platformOwnerEmail = "helpdesk@bizadoc.com";
 
-    const emailSubject = `[HelpDeskIQ Platform Inquiry] ${supportCategory}: ${supportSubject || "Assistance Request"}`;
+    const emailSubject = `[BizaDesk Platform Inquiry] ${supportCategory}: ${supportSubject || "Assistance Request"}`;
     const emailBody = `A tenant organization administrator has reached out for platform support:\n\n` +
       `Organization: ${form.name} (ID: ${orgConfig?.id || "N/A"})\n` +
       `Admin Name: ${senderName}\n` +
@@ -697,7 +697,7 @@ export default function CompanySettings({
         </div>
       </form>
 
-      {/* ── HelpDeskIQ Platform Support & Concierge Card ── */}
+      {/* ── BizaDesk Platform Support & Concierge Card ── */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950/30 to-slate-900 border border-indigo-500/30 rounded-2xl p-6 shadow-xl relative overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-start gap-4">
@@ -706,7 +706,7 @@ export default function CompanySettings({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-white">HelpDeskIQ Platform Support &amp; Concierge</h3>
+                <h3 className="text-sm font-bold text-white">BizaDesk Platform Support &amp; Concierge</h3>
                 <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
                   Tenant SLA
                 </span>
@@ -864,7 +864,7 @@ export default function CompanySettings({
                 <LifeBuoy className="w-5 h-5 text-indigo-400" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white">HelpDeskIQ Concierge Support</h3>
+                <h3 className="text-sm font-bold text-white">BizaDesk Concierge Support</h3>
                 <p className="text-[11px] text-slate-400">Direct channel to the platform engineering &amp; billing team</p>
               </div>
             </div>

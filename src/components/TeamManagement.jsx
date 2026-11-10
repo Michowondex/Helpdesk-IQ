@@ -338,7 +338,7 @@ export default function TeamManagement({ orgId, onTeamsChange }) {
                   onChange={e => setAddForm({ ...addForm, alert_email: e.target.value })}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
                 />
-                <p className="text-[11px] text-slate-500 mt-1">HelpDeskIQ will email this address when an incident routes to this team.</p>
+                <p className="text-[11px] text-slate-500 mt-1">BizaDesk will email this address when an incident routes to this team.</p>
               </div>
 
               <div>

@@ -195,7 +195,7 @@ export default function VirtualITSupport({
 
     if (optionType === "whatsapp") {
       const waMessage = encodeURIComponent(
-        `🎫 *HelpDeskIQ Support Ticket: ${ticketId}*\n\n` +
+        `🎫 *BizaDesk Support Ticket: ${ticketId}*\n\n` +
         `*Issue:* ${issueTitle}\n` +
         `*Category:* ${categoryTag}\n` +
         `*Priority:* ${priorityTag}\n` +
@@ -363,7 +363,7 @@ export default function VirtualITSupport({
               {/* WhatsApp button: ONLY for Individual users (routes to platform owner). Removed entirely for business users. */}
               {accountType === "individual" && (
                 <a
-                  href="https://wa.me/2349162029201?text=Hello%20HelpDeskIQ%20Support%2C%20I%20need%20IT%20assistance."
+                  href="https://wa.me/2349162029201?text=Hello%20BizaDesk%20Support%2C%20I%20need%20IT%20assistance."
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 text-white font-medium text-xs px-3 py-1.5 rounded-lg transition-all shadow-md shadow-emerald-950 border border-emerald-600"
@@ -630,7 +630,7 @@ export default function VirtualITSupport({
 
                 {/* Individual WhatsApp Button */}
                 <a
-                  href="https://wa.me/2349162029201?text=Hello%20HelpDeskIQ%20Support%2C%20I%20need%20IT%20assistance."
+                  href="https://wa.me/2349162029201?text=Hello%20BizaDesk%20Support%2C%20I%20need%20IT%20assistance."
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center justify-center gap-2 w-full bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold py-2.5 rounded-lg transition-colors border border-emerald-600 shadow-md shadow-emerald-950"

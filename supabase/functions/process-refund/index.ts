@@ -78,7 +78,7 @@ serve(async (req) => {
     // Call Paystack Refund API
     const refundPayload: any = {
       transaction: paystackRef,
-      merchant_note: reason || `HelpDeskIQ Ticket ${ticketId} Unresolved Refund`
+      merchant_note: reason || `BizaDesk Ticket ${ticketId} Unresolved Refund`
     };
 
     if (amount) {

@@ -79,7 +79,7 @@ export default function AuditLogsViewer({ orgId }) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `HelpDeskIQ_Audit_Logs_${new Date().toISOString().split("T")[0]}.csv`);
+    link.setAttribute("download", `BizaDesk_Audit_Logs_${new Date().toISOString().split("T")[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

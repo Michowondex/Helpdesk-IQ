@@ -416,7 +416,7 @@ export default function MonitoredServices({ services = [], teams = [], userRole 
                   onChange={e => setForm({ ...form, health_url: e.target.value })}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
                 />
-                <p className="text-[11px] text-slate-500 mt-1">HelpDeskIQ pings this URL to measure real response times and uptime.</p>
+                <p className="text-[11px] text-slate-500 mt-1">BizaDesk pings this URL to measure real response times and uptime.</p>
               </div>
 
               {/* Routing Rules Toggle */}

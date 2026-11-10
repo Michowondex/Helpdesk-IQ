@@ -102,7 +102,7 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
     setAdding(true);
 
     try {
-      const tempPass = tempPassword.trim() || "HelpDeskIQ@2026";
+      const tempPass = tempPassword.trim() || "BizaDesk@2026";
       
       // Attempt Supabase Auth account creation
       const { data: authData, error: authErr } = await supabase.auth.signUp({
@@ -241,7 +241,7 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => {
-                navigator.clipboard.writeText(`Welcome to HelpDeskIQ!\nLogin: ${createdUserNotice.email}\nTemporary Password: ${createdUserNotice.tempPass}`);
+                navigator.clipboard.writeText(`Welcome to BizaDesk!\nLogin: ${createdUserNotice.email}\nTemporary Password: ${createdUserNotice.tempPass}`);
                 setCopiedNotice(true);
                 setTimeout(() => setCopiedNotice(false), 2000);
               }}
@@ -268,7 +268,7 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
             User & Team Members Directory
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Manage who has access to HelpDeskIQ. Control roles, department assignments, and permission boundaries.
+            Manage who has access to BizaDesk. Control roles, department assignments, and permission boundaries.
           </p>
         </div>
         <button
@@ -588,7 +588,7 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
                 <div className="relative">
                   <input
                     type="text"
-                    placeholder="Defaults to HelpDeskIQ@2026"
+                    placeholder="Defaults to BizaDesk@2026"
                     value={tempPassword}
                     onChange={(e) => setTempPassword(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-100 font-mono focus:border-indigo-500 focus:outline-none"

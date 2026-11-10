@@ -74,7 +74,7 @@ serve(async (req) => {
           method: "GET",
           signal: controller.signal,
           headers: {
-            "User-Agent": "HelpDeskIQ-Sentinel-HealthProbe/1.0"
+            "User-Agent": "BizaDesk-Sentinel-HealthProbe/1.0"
           }
         });
 

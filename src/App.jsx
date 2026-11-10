@@ -149,7 +149,7 @@ export default function HelpdeskAI() {
     {
       id: "notif-init",
       type: "system",
-      title: "HelpDeskIQ Operations Live",
+      title: "BizaDesk Operations Live",
       message: "Autonomous IT support and dynamic team routing system online.",
       time: Date.now() - 120000,
       read: false
@@ -698,7 +698,7 @@ export default function HelpdeskAI() {
             email_type: "manager_escalation",
             to_address: leadEmail,
             subject: `[TIER 2 ESCALATION] Unresolved ${inc.severity} Incident: ${inc.title}`,
-            body: `Dear IT Leadership / Support Manager,\n\nIncident ${inc.id} has remained UNRESOLVED for ${Math.floor(age / 60000)} minutes.\n\nTITLE: ${inc.title}\nAPPLICATION: ${inc.app}\nSEVERITY: ${inc.severity}\nASSIGNED TEAM: ${inc.team}\n\nPlease step in or re-assign immediately.\n\nRegards,\nHelpDeskIQ Escalation Engine`,
+            body: `Dear IT Leadership / Support Manager,\n\nIncident ${inc.id} has remained UNRESOLVED for ${Math.floor(age / 60000)} minutes.\n\nTITLE: ${inc.title}\nAPPLICATION: ${inc.app}\nSEVERITY: ${inc.severity}\nASSIGNED TEAM: ${inc.team}\n\nPlease step in or re-assign immediately.\n\nRegards,\nBizaDesk Escalation Engine`,
             sent_at: Date.now()
           };
           await supabase.from("emails").insert(emailData);
@@ -722,7 +722,7 @@ export default function HelpdeskAI() {
             email_type: isCritical ? "allstaff" : "exec_notice",
             to_address: recipientEmail,
             subject: `[TIER 3 ${isCritical ? "ALL-STAFF OUTAGE" : "EXECUTIVE"}] ${inc.title}`,
-            body: `URGENT NOTICE:\n\nIncident ${inc.id} is still open after ${Math.floor(age / 60000)} minutes.\nAPPLICATION: ${inc.app}\nSEVERITY: ${inc.severity}\nSTATUS: MAXIMUM ESCALATION\n\n${isCritical ? "All company staff are being notified of this service disruption." : "Sent to IT executive oversight for immediate intervention."}\n\nHelpDeskIQ System`,
+            body: `URGENT NOTICE:\n\nIncident ${inc.id} is still open after ${Math.floor(age / 60000)} minutes.\nAPPLICATION: ${inc.app}\nSEVERITY: ${inc.severity}\nSTATUS: MAXIMUM ESCALATION\n\n${isCritical ? "All company staff are being notified of this service disruption." : "Sent to IT executive oversight for immediate intervention."}\n\nBizaDesk System`,
             sent_at: Date.now()
           };
           await supabase.from("emails").insert(emailData);
@@ -782,17 +782,17 @@ export default function HelpdeskAI() {
       initial: {
         to_address: `${inc.team.toLowerCase().replace(/ /g, "-")}@company.com`,
         subject: `[${inc.severity}] Incident Alert: ${inc.title} — ${inc.app}`,
-        body: `Dear ${inc.team},\n\nAn automated incident has been detected.\n\nINCIDENT ID: ${inc.id}\nTITLE: ${inc.title}\nAPPLICATION: ${inc.app}\nSEVERITY: ${inc.severity}\nDETECTED AT: ${fmtTime(inc.opened_at)}\n\nDESCRIPTION:\n${inc.description}\n\nPLEASE TAKE IMMEDIATE ACTION.\n\nRegards,\nHelpDeskIQ System`
+        body: `Dear ${inc.team},\n\nAn automated incident has been detected.\n\nINCIDENT ID: ${inc.id}\nTITLE: ${inc.title}\nAPPLICATION: ${inc.app}\nSEVERITY: ${inc.severity}\nDETECTED AT: ${fmtTime(inc.opened_at)}\n\nDESCRIPTION:\n${inc.description}\n\nPLEASE TAKE IMMEDIATE ACTION.\n\nRegards,\nBizaDesk System`
       },
       followup: {
         to_address: `${inc.team.toLowerCase().replace(/ /g, "-")}@company.com`,
         subject: `[FOLLOW-UP] Still Open: ${inc.title} (${inc.id})`,
-        body: `Dear ${inc.team},\n\nIncident ${inc.id} remains UNRESOLVED.\nTime Open: ${Math.floor((Date.now() - inc.opened_at) / 60000)} minutes\n\nAll-staff alert will trigger if unresolved.\n\nRegards,\nHelpDeskIQ System`
+        body: `Dear ${inc.team},\n\nIncident ${inc.id} remains UNRESOLVED.\nTime Open: ${Math.floor((Date.now() - inc.opened_at) / 60000)} minutes\n\nAll-staff alert will trigger if unresolved.\n\nRegards,\nBizaDesk System`
       },
       resolution: {
         to_address: orgConfig.allstaff_email || "all-staff@company.com",
         subject: `[RESOLVED] ${inc.title} — ${inc.id}`,
-        body: `Dear All,\n\nThe following incident has been RESOLVED.\n\nINCIDENT: ${inc.id}\nTITLE: ${inc.title}\nAPPLICATION: ${inc.app}\nRESOLVED BY: ${inc.assignee || inc.team}\nTIME TO RESOLVE: ${Math.floor((Date.now() - inc.opened_at) / 60000)} minutes\n\nAll systems are now operating normally.\n\nRegards,\nHelpDeskIQ System`
+        body: `Dear All,\n\nThe following incident has been RESOLVED.\n\nINCIDENT: ${inc.id}\nTITLE: ${inc.title}\nAPPLICATION: ${inc.app}\nRESOLVED BY: ${inc.assignee || inc.team}\nTIME TO RESOLVE: ${Math.floor((Date.now() - inc.opened_at) / 60000)} minutes\n\nAll systems are now operating normally.\n\nRegards,\nBizaDesk System`
       }
     };
     return templates[emailType] ? { inc_id: inc.id, email_type: emailType, ...templates[emailType] } : null;

@@ -82,7 +82,7 @@ export default function IndividualCheckoutModal({
         currency: "NGN",
         ref: txRef,
         metadata: {
-          app: "HelpDeskIQ",
+          app: "BizaDesk",
           service: supportType === "REMOTE" ? "remote_it_support" : "physical_onsite_visit",
           user_id: user?.id,
           customer_name: userName,

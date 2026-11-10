@@ -78,14 +78,14 @@ serve(async (req) => {
     const resendPayload: Record<string, unknown> = {
       from: effectiveFrom,
       to: Array.isArray(to) ? to : [to],
-      subject: subject || "HelpDeskIQ Notification",
+      subject: subject || "BizaDesk Notification",
       text: body || "",
       html: html || `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px;">
-          <h2 style="color: #4f46e5; margin-top: 0; font-size: 18px;">HelpDeskIQ Notification</h2>
+          <h2 style="color: #2563eb; margin-top: 0; font-size: 18px;">⚡ BizaDesk Notification</h2>
           <div style="white-space: pre-wrap; font-size: 14px; color: #334155; margin: 16px 0;">${body || ""}</div>
           <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-          <p style="font-size: 11px; color: #94a3b8; margin: 0;">Sent automatically by HelpDeskIQ Support System.</p>
+          <p style="font-size: 11px; color: #94a3b8; margin: 0;">Sent automatically by BizaDesk Support System.</p>
         </div>
       `,
     };

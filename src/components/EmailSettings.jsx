@@ -52,8 +52,8 @@ export default function EmailSettings({ orgConfig, onSaveEmailConfig }) {
     setTesting(true);
     setTestResult(null);
 
-    const testSubject = `[TEST] HelpDeskIQ Email Server Verification (${provider.toUpperCase()})`;
-    const testBody = `Hello,\n\nThis is a verification test from HelpDeskIQ.\n\nProvider: ${provider === "resend" ? "Resend API" : `Custom SMTP (${smtpHost}:${smtpPort})`}\nSender: ${provider === "resend" ? resendFrom : smtpFromEmail || smtpUser}\nTimestamp: ${new Date().toLocaleString()}\n\nIf you received this, your email delivery setup is configured properly!`;
+    const testSubject = `[TEST] BizaDesk Email Server Verification (${provider.toUpperCase()})`;
+    const testBody = `Hello,\n\nThis is a verification test from BizaDesk.\n\nProvider: ${provider === "resend" ? "Resend API" : `Custom SMTP (${smtpHost}:${smtpPort})`}\nSender: ${provider === "resend" ? resendFrom : smtpFromEmail || smtpUser}\nTimestamp: ${new Date().toLocaleString()}\n\nIf you received this, your email delivery setup is configured properly!`;
 
     try {
       if (provider === "resend") {
@@ -111,7 +111,7 @@ export default function EmailSettings({ orgConfig, onSaveEmailConfig }) {
             Email Delivery & Server Integration
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Configure how HelpDeskIQ delivers ticket updates, escalation alerts, and resolution notices.
+            Configure how BizaDesk delivers ticket updates, escalation alerts, and resolution notices.
           </p>
         </div>
       </div>
