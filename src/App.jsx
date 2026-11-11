@@ -301,7 +301,8 @@ export default function HelpdeskAI() {
     const { data } = await supabase
       .from("organizations")
       .select("id")
-      .eq("domain", PLATFORM_MASTER_DOMAIN)
+      .or(`domain.eq.${PLATFORM_MASTER_DOMAIN},is_master_org.eq.true`)
+      .limit(1)
       .maybeSingle();
     if (data?.id) {
       setMasterOrgId(data.id);
