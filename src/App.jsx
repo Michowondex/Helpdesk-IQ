@@ -1662,6 +1662,15 @@ export default function HelpdeskAI() {
   }
 
   if (!currentUser) {
+    if (portalLoading) {
+      return (
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center text-indigo-400 font-sans text-xs tracking-wider">
+          <Activity className="w-5 h-5 animate-spin mr-2" />
+          LOADING CLIENT SUPPORT PORTAL...
+        </div>
+      );
+    }
+
     if (showAuthScreen) {
       return (
         <AuthScreen

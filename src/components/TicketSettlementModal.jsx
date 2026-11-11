@@ -2,10 +2,8 @@ import { useState } from "react";
 import { CheckCircle2, RotateCcw, Scale, AlertTriangle, ShieldCheck, X, Loader2, DollarSign, MapPin, Monitor } from "lucide-react";
 
 export default function TicketSettlementModal({ isOpen, ticket, onClose, onSettle }) {
-  if (!isOpen || !ticket) return null;
-
-  const totalAmount = Number(ticket.payment_amount) || 0;
-  const isPhysical = ticket.support_type === "PHYSICAL_VISIT";
+  const totalAmount = Number(ticket?.payment_amount) || 0;
+  const isPhysical = ticket?.support_type === "PHYSICAL_VISIT";
   
   // Suggested baseline diagnostic/call-out fee
   const defaultDiagnosticFee = isPhysical ? 3000 : 1500;
@@ -16,6 +14,8 @@ export default function TicketSettlementModal({ isOpen, ticket, onClose, onSettl
   const [refundRefInput, setRefundRefInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  if (!isOpen || !ticket) return null;
 
   const calculatedRefundAmount = selectedAction === "FULL_REFUND" 
     ? totalAmount 
