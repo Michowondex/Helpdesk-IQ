@@ -30,7 +30,7 @@ export function formatArticleContent(text, orgConfig = {}) {
     .replace(/\{\{PING_TARGET\}\}/g, "8.8.8.8");
 }
 
-export function matchQuery(query, { incidents = [], services = [], customArticles = [], orgConfig = {} }) {
+export function matchQuery(query, { incidents = [], services: _services = [], customArticles = [], orgConfig = {} }) {
   const qClean = normalize(query);
   const qWords = qClean.split(" ").filter(w => w.length > 1);
 

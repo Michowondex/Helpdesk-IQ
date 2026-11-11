@@ -28,7 +28,7 @@ export function playNotificationChime() {
     gain2.connect(ctx.destination);
     osc2.start(ctx.currentTime + 0.12);
     osc2.stop(ctx.currentTime + 0.5);
-  } catch (err) {
+  } catch (_err) {
     // Autoplay policy fallback
   }
 }

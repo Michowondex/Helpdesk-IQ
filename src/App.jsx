@@ -144,7 +144,9 @@ export default function HelpdeskAI() {
     setTheme(next);
     try {
       localStorage.setItem("bizadesk_theme", next);
-    } catch (_) {}
+    } catch (_) {
+      // Ignored
+    }
   };
 
   // User Authentication & RBAC state
@@ -240,8 +242,8 @@ export default function HelpdeskAI() {
   });
   const [newIncModal, setNewIncModal] = useState(false);
   const [incForm, setIncForm] = useState({ title: "", severity: "HIGH", app: "", team: "Database Team", desc: "" });
-  const [resolveModal, setResolveModal] = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [_resolveModal, setResolveModal] = useState(null);
+  const [_deleteConfirm, setDeleteConfirm] = useState(null);
   const [activeChatTicket, setActiveChatTicket] = useState(null);
   const [settlementTicket, setSettlementTicket] = useState(null);
   const [showMandatoryMfaEnroll, setShowMandatoryMfaEnroll] = useState(false);
@@ -563,7 +565,9 @@ export default function HelpdeskAI() {
 
         try {
           await supabase.from("profiles").insert(fallbackProfile);
-        } catch (_) {}
+        } catch (_) {
+          // Ignored
+        }
         setCurrentUserProfile(fallbackProfile);
         loadData(targetOrgId);
       }
@@ -771,7 +775,7 @@ export default function HelpdeskAI() {
 
   // ── Smart Incident Routing ─────────────────────────────────────────────────
   // Given a failure type string, resolve the correct team from loaded teams
-  const resolveTeamForFailure = (failureType, serviceRoutingRules) => {
+  const _resolveTeamForFailure = (failureType, serviceRoutingRules) => {
     // 1. Check service-specific rules first
     if (serviceRoutingRules && serviceRoutingRules[failureType]) {
       const teamId = serviceRoutingRules[failureType];
@@ -792,7 +796,7 @@ export default function HelpdeskAI() {
   };
 
   // Detect failure type from a health check error
-  const detectFailureType = (error, statusCode, responseBody, responseTimeMs) => {
+  const _detectFailureType = (error, statusCode, responseBody, responseTimeMs) => {
     if (!statusCode || error?.name === "TypeError") return "connection_refused";
     if (responseTimeMs > 3000) return "slow_response";
     if (statusCode >= 500) {
@@ -963,7 +967,7 @@ export default function HelpdeskAI() {
 
   // Multi-Tier Incident Escalation Ladder Check (Tier 1 -> Tier 2 -> Tier 3)
   useEffect(() => {
-    const tier1ThresholdMs = (orgConfig.incident_sla_minutes || 10) * 60000;
+    const _tier1ThresholdMs = (orgConfig.incident_sla_minutes || 10) * 60000;
     const tier2ThresholdMs = 15 * 60000; // 15 mins -> Escalate to IT Lead / Dept Manager
     const tier3ThresholdMs = 30 * 60000; // 30 mins -> Escalate to All-Staff ONLY if CRITICAL
 
@@ -1053,7 +1057,9 @@ export default function HelpdeskAI() {
         read: false,
         created_at: Date.now()
       });
-    } catch (_) {}
+    } catch (_) {
+      // Ignored
+    }
     showBanner(`🚨 ${id} Created — ${formData.team} Notified`, "#f97316");
     setNewIncModal(false);
     setIncForm({ title: "", severity: "HIGH", app: "", team: "Database Team", desc: "" });
@@ -1207,7 +1213,9 @@ export default function HelpdeskAI() {
       }).then(({ data }) => {
         if (data?.[0]?.id) newNotif.id = data[0].id;
       });
-    } catch (_) {}
+    } catch (_) {
+      // Ignored
+    }
 
     setNotifications(prev => [newNotif, ...prev]);
     playNotificationChime();
@@ -1292,7 +1300,9 @@ export default function HelpdeskAI() {
           result: "SUCCESS",
           details: `Changed by ${techName} (${currentUserProfile?.role || "Staff"})`
         });
-      } catch (_) {}
+      } catch (_) {
+        // Ignored
+      }
 
       // Dispatch Outbound White-Label Ticket Update / Resolution Email
       try {
@@ -1320,12 +1330,12 @@ export default function HelpdeskAI() {
     }
   };
 
-  const closeTicket = async (t) => {
+  const _closeTicket = async (t) => {
     await updateTicketStatus(t, "RESOLVED");
   };
 
   // 1-Click Paystack Refund Handler (Admin only)
-  const handleProcessRefund = async (t) => {
+  const _handleProcessRefund = async (t) => {
     if (!t.paystack_ref) {
       showBanner("Cannot refund: No Paystack transaction reference on this ticket.", "#ef4444");
       return;
@@ -1579,7 +1589,7 @@ export default function HelpdeskAI() {
         setServices(prev => [{ ...serviceData, id: `svc-${Date.now()}` }, ...prev]);
         showBanner(`Monitored app "${serviceData.name}" added!`, "#22c55e");
       }
-    } catch (err) {
+    } catch (_err) {
       setServices(prev => [{ ...serviceData, id: `svc-${Date.now()}` }, ...prev]);
       showBanner(`Monitored app "${serviceData.name}" added!`, "#22c55e");
     }

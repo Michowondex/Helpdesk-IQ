@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Users, Plus, Trash2, Mail, Webhook, Star, StarOff, Edit3, Check, X, Shield } from "lucide-react";
 import { supabase } from "../supabase";
 
@@ -11,7 +11,7 @@ const FAILURE_LABELS = {
   default:           { label: "All Other / Catch-All Failures", color: "text-slate-300", hint: "Any failure type not matched above" },
 };
 
-function TeamCard({ team, teams, onDelete, onToggleDefault, onEdit }) {
+function TeamCard({ team, onDelete, onToggleDefault, onEdit }) {
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({ team_name: team.team_name, alert_email: team.alert_email || "", webhook_url: team.webhook_url || "" });
   const [saving, setSaving] = useState(false);
@@ -121,7 +121,7 @@ export default function TeamManagement({ orgId, onTeamsChange }) {
     setTimeout(() => setBanner(null), 3500);
   };
 
-  const loadTeams = async () => {
+  const loadTeams = useCallback(async () => {
     if (!orgId) { setLoading(false); return; }
     const { data, error } = await supabase
       .from("teams")
@@ -133,9 +133,27 @@ export default function TeamManagement({ orgId, onTeamsChange }) {
       if (onTeamsChange) onTeamsChange(data);
     }
     setLoading(false);
-  };
+  }, [orgId, onTeamsChange]);
 
-  useEffect(() => { loadTeams(); }, [orgId]);
+  useEffect(() => {
+    let isMounted = true;
+    if (!orgId) return;
+
+    supabase
+      .from("teams")
+      .select("*")
+      .eq("org_id", orgId)
+      .order("created_at", { ascending: true })
+      .then(({ data, error }) => {
+        if (!isMounted) return;
+        if (!error && data) {
+          setTeams(data);
+          if (onTeamsChange) onTeamsChange(data);
+        }
+        setLoading(false);
+      });
+    return () => { isMounted = false; };
+  }, [orgId, onTeamsChange]);
 
   const handleAdd = async (e) => {
     e.preventDefault();
