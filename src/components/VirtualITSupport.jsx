@@ -353,7 +353,13 @@ export default function VirtualITSupport({
           {/* Remote Assist Button (Only shown to regular users in Virtual IT) */}
           {userRole === "user" && (
             <button
-              onClick={() => setShowRemoteModal(true)}
+              onClick={() => {
+                if (accountType === "individual" && orgConfig?.workspace_mode !== "ENTERPRISE") {
+                  handleSelectThreeWayOption("call", { summary: "Remote Screen Diagnostics & Quick Assist" });
+                } else {
+                  setShowRemoteModal(true);
+                }
+              }}
               className="hidden sm:flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1.5 rounded-lg border border-slate-700 transition-colors"
             >
               <Monitor className="w-3.5 h-3.5 text-indigo-400" />
@@ -366,18 +372,29 @@ export default function VirtualITSupport({
             <>
               {/* WhatsApp button: ONLY for Individual users (routes to platform owner). Removed entirely for business users. */}
               {accountType === "individual" && (
-                <a
-                  href="https://wa.me/2349162029201?text=Hello%20BizaDesk%20Support%2C%20I%20need%20IT%20assistance."
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  onClick={() => {
+                    if (orgConfig?.workspace_mode !== "ENTERPRISE") {
+                      handleSelectThreeWayOption("whatsapp", { summary: "WhatsApp Priority IT Assistance" });
+                    } else {
+                      const waNum = (orgConfig.support_whatsapp || "+2349162029201").replace(/\D/g, "");
+                      window.open(`https://wa.me/${waNum}?text=Hello%20BizaDesk%20Support%2C%20I%20need%20IT%20assistance.`, "_blank");
+                    }
+                  }}
                   className="flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 text-white font-medium text-xs px-3 py-1.5 rounded-lg transition-all shadow-md shadow-emerald-950 border border-emerald-600"
                 >
                   <MessageCircle className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">WhatsApp</span>
-                </a>
+                </button>
               )}
               <button
-                onClick={() => setShowContactModal(true)}
+                onClick={() => {
+                  if (accountType === "individual" && orgConfig?.workspace_mode !== "ENTERPRISE") {
+                    handleSelectThreeWayOption("call", { summary: "Direct Phone Call IT Support" });
+                  } else {
+                    setShowContactModal(true);
+                  }
+                }}
                 className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs px-3 py-1.5 rounded-lg transition-all border border-slate-700"
               >
                 <Phone className="w-3.5 h-3.5 text-emerald-400" />

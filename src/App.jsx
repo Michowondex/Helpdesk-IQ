@@ -508,8 +508,15 @@ export default function HelpdeskAI() {
         const userDomain = user.email && user.email.includes("@") ? user.email.split("@")[1].toLowerCase() : "company.com";
         const companyName = user.user_metadata?.company_name;
         const accountType = user.user_metadata?.account_type || (companyName ? "business" : "individual");
+        const isMasterOwner = userDomain === PLATFORM_MASTER_DOMAIN;
 
-        if (companyName || accountType === "individual") {
+        // If the user signed up as a public individual (no business / enterprise company name)
+        // do NOT create an isolated empty org: link them directly to the Platform Master Workspace (bizadoc.com)
+        // so they automatically inherit the master org's support channels, Paystack pricing, and knowledge base.
+        if (accountType === "individual" && !companyName) {
+          const mOrgId = masterOrgId || await resolveMasterOrgId();
+          targetOrgId = mOrgId;
+        } else if (companyName || accountType === "business") {
           const workspaceName = companyName?.trim() || `${user.user_metadata?.full_name || user.email.split("@")[0]}'s Workspace`;
           const rawSlug = userDomain && userDomain.includes(".") 
             ? userDomain.split(".")[0].toLowerCase() 
@@ -563,9 +570,13 @@ export default function HelpdeskAI() {
           }
         }
 
-        // Assigned role: Creator of workspace is admin; invited members receive their assigned role (default 'user')
-        const isMasterOwner = userDomain === PLATFORM_MASTER_DOMAIN;
-        const assignedRole = (targetOrgId || isMasterOwner) ? "admin" : (user.user_metadata?.role || "user");
+        // Assigned role:
+        // - Public individuals linked to master org: role is 'user'
+        // - Workspace owners creating their business workspace: role is 'admin'
+        // - Master owner (helpdesk@bizadoc.com): role is 'admin'
+        const assignedRole = (accountType === "individual" && !isMasterOwner)
+          ? "user"
+          : (targetOrgId || isMasterOwner) ? "admin" : (user.user_metadata?.role || "user");
 
         const fallbackProfile = {
           id: user.id,
@@ -573,8 +584,8 @@ export default function HelpdeskAI() {
           role: assignedRole,
           full_name: user.user_metadata?.full_name || user.email.split("@")[0],
           email: user.email,
-          department: user.user_metadata?.department || (assignedRole === "admin" ? "IT Administration" : "General IT"),
-          account_type: isMasterOwner ? "business" : (user.user_metadata?.account_type || "business")  // persist so tab-gating works on every login
+          department: user.user_metadata?.department || (assignedRole === "admin" ? "IT Administration" : "Public Customer"),
+          account_type: isMasterOwner ? "business" : (user.user_metadata?.account_type || (accountType === "individual" ? "individual" : "business"))
         };
 
         try {
@@ -1883,14 +1894,26 @@ export default function HelpdeskAI() {
                 <span className={`font-extrabold text-sm tracking-tight ${theme === "light" ? "text-slate-900" : "text-white"}`}>
                   Biza<span className={theme === "light" ? "text-indigo-600" : "text-indigo-400"}>Desk</span>
                 </span>
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
-                  Enterprise
-                </span>
+                {isIndividualAccount ? (
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                    Personal IT
+                  </span>
+                ) : orgConfig?.is_master_org ? (
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                    Platform Owner
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                    {orgConfig?.workspace_mode === "COMMERCIAL" ? "IT Provider" : "Enterprise"}
+                  </span>
+                )}
               </div>
-              <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                <Building2 className="w-3 h-3 text-slate-500" />
-                {orgConfig.name || "Primary Organization"}
-              </span>
+              {!isIndividualAccount && (
+                <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                  <Building2 className="w-3 h-3 text-slate-500" />
+                  {orgConfig.name || "Primary Organization"}
+                </span>
+              )}
             </div>
 
             {/* Live System Status Indicator & Clock */}
@@ -2006,7 +2029,7 @@ export default function HelpdeskAI() {
             incidents={incidents}
             services={services}
             customArticles={customArticles}
-            orgConfig={orgConfig}
+            orgConfig={isIndividualAccount ? { ...orgConfig, enable_global_kb: true } : orgConfig}
             userRole={userRole}
             accountType={
               currentUserProfile?.account_type ||

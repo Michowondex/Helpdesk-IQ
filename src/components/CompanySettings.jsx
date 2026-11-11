@@ -4,7 +4,8 @@ import {
   Save, LifeBuoy, Send, MessageSquare, Sparkles, X, ExternalLink, 
   Plus, BookOpen, Trash2, Tag, ListOrdered, FileText, ChevronDown, ChevronUp,
   Download, FileSpreadsheet, Globe, ToggleLeft, ToggleRight,
-  ShieldCheck, Smartphone, KeyRound, ShieldAlert, Building2, Copy, Check, DollarSign
+  ShieldCheck, Smartphone, KeyRound, ShieldAlert, Building2, Copy, Check, DollarSign,
+  Crown, CreditCard, Users, Radio
 } from "lucide-react";
 import { supabase } from "../supabase";
 import { sendEmailViaResend } from "../engine/emailDispatcher";
@@ -380,6 +381,160 @@ export default function CompanySettings({
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* ── Option B: Platform Master Workspace Control Card (Only for Master Org / bizadoc.com owner) ── */}
+        {orgConfig?.is_master_org && (
+          <div className="bg-gradient-to-br from-amber-950/30 via-slate-900 to-indigo-950/20 border-2 border-amber-500/40 rounded-2xl p-6 shadow-xl space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-amber-500/20">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+                  <Crown className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-white tracking-tight">Platform Master Workspace</h3>
+                    <span className="text-[10px] font-extrabold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/40 uppercase tracking-wider">
+                      Option B Platform Control
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-200/80 mt-0.5">
+                    Settings configured here broadcast across all public individual accounts registered on BizaDesk.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-slate-950/80 border border-amber-500/30 rounded-lg px-3 py-1.5 self-start sm:self-auto">
+                <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                <span className="text-[11px] font-mono text-emerald-400 font-semibold">Broadcasting Live</span>
+              </div>
+            </div>
+
+            {/* Paystack Gateway & Inheritance Status Badges */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
+                  <CreditCard className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-semibold text-slate-400 block">Paystack Gateway</span>
+                  <span className="text-xs font-bold text-emerald-400">Active (Live Cards &amp; NGN)</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0">
+                  <Users className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-semibold text-slate-400 block">Public Individual Users</span>
+                  <span className="text-xs font-bold text-indigo-300">Linked to this Master Org</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-cyan-500/10 text-cyan-400 flex items-center justify-center shrink-0">
+                  <Globe className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-semibold text-slate-400 block">Commercial Businesses</span>
+                  <span className="text-xs font-bold text-cyan-300">Isolated (Independent)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Platform Broadcast Channels */}
+            <div className="bg-slate-950/80 border border-amber-500/20 rounded-xl p-4 space-y-4">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2">
+                <Phone className="w-3.5 h-3.5" />
+                Public Individual Support Channels (Auto-Broadcasted)
+              </h4>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                When any public individual clicks &quot;Call IT&quot;, &quot;WhatsApp&quot;, or initiates checkout, these channels and numbers are presented.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                    Master IT Hotline / Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={form.support_phone}
+                    onChange={e => setForm({ ...form, support_phone: e.target.value })}
+                    placeholder="+234 916 202 9201"
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-lg px-3 py-2 text-xs text-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                    Master WhatsApp Number / Link
+                  </label>
+                  <input
+                    type="text"
+                    value={form.support_whatsapp}
+                    onChange={e => setForm({ ...form, support_whatsapp: e.target.value })}
+                    placeholder="+2349162029201"
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-lg px-3 py-2 text-xs text-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                    Master Helpdesk Email
+                  </label>
+                  <input
+                    type="email"
+                    value={form.support_email}
+                    onChange={e => setForm({ ...form, support_email: e.target.value })}
+                    placeholder="helpdesk@bizadoc.com"
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-lg px-3 py-2 text-xs text-white focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Platform Paystack Pricing Engine */}
+            <div className="bg-slate-950/80 border border-amber-500/20 rounded-xl p-4 space-y-4">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2">
+                <DollarSign className="w-3.5 h-3.5" />
+                Public Individual Paystack Pricing Engine
+              </h4>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                These rates power the Paystack inline checkout modal for all public individual users who require remote screen assistance or physical technician dispatch.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                    Remote Diagnostics &amp; Guided Fix Fee (₦)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.remote_fee}
+                    onChange={e => setForm({ ...form, remote_fee: Number(e.target.value) })}
+                    placeholder="3500"
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-lg px-3 py-2 text-xs text-white font-mono font-bold focus:outline-none"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">Standard public fee: ₦3,500</span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                    Physical On-Site Visit Baseline Fee (₦)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.physical_visit_fee}
+                    onChange={e => setForm({ ...form, physical_visit_fee: Number(e.target.value) })}
+                    placeholder="10000"
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-lg px-3 py-2 text-xs text-white font-mono font-bold focus:outline-none"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">Standard public baseline: ₦10,000 (auto-scaled by region)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Workspace Operating Model Card */}
         {orgConfig?.workspace_mode === "ENTERPRISE" ? (
           <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-start gap-3 shadow-sm">
