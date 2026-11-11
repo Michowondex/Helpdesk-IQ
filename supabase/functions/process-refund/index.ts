@@ -66,7 +66,7 @@ serve(async (req) => {
       }
     }
 
-    const { ticketId, paystackRef, amount, reason } = await req.json();
+    const { ticketId, paystackRef, amount, reason, paymentStatus, settlementNote } = await req.json();
 
     if (!paystackRef) {
       return new Response(JSON.stringify({ error: "Missing Paystack transaction reference" }), {
@@ -110,14 +110,27 @@ serve(async (req) => {
 
     // Update ticket in database
     if (ticketId) {
+      const updatePayload: Record<string, any> = {
+        payment_status: paymentStatus || "REFUNDED",
+        status: "RESOLVED",
+        refund_ref: String(refundRef),
+        refunded_at: new Date().toISOString()
+      };
+      if (amount !== undefined && amount !== null) {
+        updatePayload.refunded_amount = Number(amount);
+      }
+      if (paymentStatus === "PARTIALLY_REFUNDED") {
+        updatePayload.settlement_status = "PARTIAL_REFUND";
+      } else {
+        updatePayload.settlement_status = "FULL_REFUND";
+      }
+      if (settlementNote) {
+        updatePayload.settlement_note = settlementNote;
+      }
+
       await supabase
         .from("tickets")
-        .update({
-          payment_status: "REFUNDED",
-          status: "RESOLVED",
-          refund_ref: String(refundRef),
-          refunded_at: new Date().toISOString()
-        })
+        .update(updatePayload)
         .eq("id", ticketId);
     }
 

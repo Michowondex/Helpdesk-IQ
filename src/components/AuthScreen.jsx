@@ -6,6 +6,7 @@ import {
   Briefcase, CheckCircle2, ShieldAlert, Check
 } from "lucide-react";
 import { supabase } from "../supabase";
+import MfaChallengeModal from "./MfaChallengeModal";
 
 const IS_DEV_MODE = import.meta.env.DEV;
 
@@ -58,6 +59,11 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
   const [verificationPendingEmail, setVerificationPendingEmail] = useState("");
   const [infoMsg, setInfoMsg] = useState("");
   const [showSandboxPreview, setShowSandboxPreview] = useState(IS_DEV_MODE);
+
+  // 2FA / MFA Challenge state
+  const [showMfaChallenge, setShowMfaChallenge] = useState(false);
+  const [mfaPendingUser, setMfaPendingUser] = useState(null);
+  const [mfaFactorId, setMfaFactorId] = useState("");
 
   const emailDomain = email.split("@")[1]?.toLowerCase()?.trim();
   const showBusinessDomainWarning = isSignUp && accountType === "business" && email.includes("@") && emailDomain && isConsumerEmail(email);
@@ -222,6 +228,22 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
 
         if (error) throw error;
         if (data?.user) {
+          // Check if user has an active TOTP MFA challenge requirement (aal1 -> aal2)
+          try {
+            const { data: aalData, error: aalErr } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+            if (!aalErr && aalData?.nextLevel === "aal2" && aalData?.currentLevel === "aal1") {
+              const { data: factorsData } = await supabase.auth.mfa.listFactors();
+              const verifiedTotp = factorsData?.totp?.find(f => f.status === "verified");
+              if (verifiedTotp) {
+                setMfaPendingUser(data.user);
+                setMfaFactorId(verifiedTotp.id);
+                setShowMfaChallenge(true);
+                setLoading(false);
+                return;
+              }
+            }
+          } catch (_) {}
+
           onAuthSuccess(data.user);
         }
       }
@@ -688,6 +710,25 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
           <span>Protected with Supabase Row Level Security (RLS) & Verified Email Confirmation</span>
         </div>
       </div>
+
+      {/* MFA / 2FA Login Challenge Modal */}
+      {showMfaChallenge && (
+        <MfaChallengeModal
+          isOpen={showMfaChallenge}
+          factorId={mfaFactorId}
+          userEmail={mfaPendingUser?.email || email}
+          onSuccess={() => {
+            setShowMfaChallenge(false);
+            onAuthSuccess(mfaPendingUser);
+          }}
+          onCancel={async () => {
+            setShowMfaChallenge(false);
+            setMfaPendingUser(null);
+            setMfaFactorId("");
+            await supabase.auth.signOut();
+          }}
+        />
+      )}
     </div>
   );
 }

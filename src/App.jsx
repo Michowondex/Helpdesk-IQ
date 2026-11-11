@@ -4,7 +4,7 @@ import {
   Plus, CheckCircle2, RefreshCw, Trash2, Clock, ShieldAlert,
   ChevronRight, Building2, Flame, HelpCircle, LogOut, User, Users,
   Monitor, Cpu, Globe, Sparkles, MessageSquare, KeyRound, X, Eye, EyeOff,
-  Sun, Moon
+  Sun, Moon, Scale, ShieldCheck
 } from "lucide-react";
 import { supabase } from "./supabase";
 import VirtualITSupport from "./components/VirtualITSupport";
@@ -33,6 +33,8 @@ const UserManagement = lazy(() => import("./components/UserManagement"));
 const TicketChatModal = lazy(() => import("./components/TicketChatModal"));
 const EmailSettings = lazy(() => import("./components/EmailSettings"));
 const AuditLogsViewer = lazy(() => import("./components/AuditLogsViewer"));
+const TicketSettlementModal = lazy(() => import("./components/TicketSettlementModal"));
+const MfaEnrollModal = lazy(() => import("./components/MfaEnrollModal"));
 
 // ── Platform Master Workspace — all individual-user tickets route here ────────
 const PLATFORM_MASTER_DOMAIN = "bizadoc.com";
@@ -202,6 +204,8 @@ export default function HelpdeskAI() {
   const [resolveModal, setResolveModal] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [activeChatTicket, setActiveChatTicket] = useState(null);
+  const [settlementTicket, setSettlementTicket] = useState(null);
+  const [showMandatoryMfaEnroll, setShowMandatoryMfaEnroll] = useState(false);
 
   // Tickets queue interactive filter states
   const [ticketStatusFilter, setTicketStatusFilter] = useState("ALL"); // 'ALL' | 'OPEN' | 'IN_PROGRESS' | 'RESOLVED'
@@ -589,6 +593,32 @@ export default function HelpdeskAI() {
       activityEvents.forEach(evt => window.removeEventListener(evt, resetIdleTimer));
     };
   }, [currentUser]);
+
+  // ── Mandatory 2FA Check for Enforced Workspaces ─────────────────────────
+  useEffect(() => {
+    if (!currentUser || currentUser?.demoRole) return;
+    const checkMfaEnforcement = async () => {
+      try {
+        const isEnforced = orgConfig?.enforce_mfa === true;
+        const isPrivileged = currentUserProfile?.role === "admin" || currentUserProfile?.role === "technician";
+        if (isEnforced && isPrivileged) {
+          const { data, error } = await supabase.auth.mfa.listFactors();
+          if (!error) {
+            const verifiedTotp = (data?.totp || []).filter(f => f.status === "verified");
+            if (verifiedTotp.length === 0) {
+              setShowMandatoryMfaEnroll(true);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("MFA check failed:", e);
+      }
+    };
+
+    if (orgConfig && currentUserProfile) {
+      checkMfaEnforcement();
+    }
+  }, [currentUser, orgConfig?.enforce_mfa, currentUserProfile?.role]);
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
@@ -1289,6 +1319,71 @@ export default function HelpdeskAI() {
     } catch (err) {
       console.warn("Refund error:", err);
       showBanner(`Refund Error: ${err.message}`, "#ef4444");
+    }
+  };
+
+  // ── Universal Ticket Resolution Settlement (Admin Only) ─────────────────
+  const handleProcessSettlement = async (settlement) => {
+    const { action, ticketId, diagnosticFee, refundAmount, reasonNote, paystackRef } = settlement;
+    const targetTicket = tickets.find(t => t.id === ticketId) || settlementTicket;
+
+    try {
+      if (action === "CONFIRM_RESOLVED") {
+        await updateTicketStatus(targetTicket, "RESOLVED");
+        await supabase.from("tickets").update({
+          settlement_status: "CONFIRM_RESOLVED",
+          settlement_note: reasonNote || "Admin reviewed and confirmed resolution."
+        }).eq("id", ticketId);
+
+        showBanner(`✅ Ticket ${ticketId} resolved and confirmed closed!`, "#22c55e");
+        setSettlementTicket(null);
+        loadData();
+        return;
+      }
+
+      if (!paystackRef) {
+        throw new Error("Cannot process refund: No Paystack payment reference found on this ticket.");
+      }
+
+      showBanner(`Processing Paystack ${action === "FULL_REFUND" ? "100% full" : "partial"} refund...`, "#6366f1");
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || "";
+
+      const res = await fetch("https://lebbchvpjgxzkkagmawu.supabase.co/functions/v1/process-refund", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          ticketId: ticketId,
+          paystackRef: paystackRef,
+          amount: refundAmount,
+          paymentStatus: action === "FULL_REFUND" ? "REFUNDED" : "PARTIALLY_REFUNDED",
+          settlementNote: reasonNote || (action === "FULL_REFUND" 
+            ? `100% full refund issued by admin: ${targetTicket?.title}` 
+            : `Partial refund of ₦${refundAmount} issued; ₦${diagnosticFee} retained for technician: ${targetTicket?.title}`)
+        })
+      });
+
+      const result = await res.json();
+      if (!res.ok || result.error) {
+        throw new Error(result.error || "Paystack refund call failed");
+      }
+
+      if (action === "FULL_REFUND") {
+        showBanner(`💸 100% Full Refund of ₦${Number(refundAmount).toLocaleString()} Issued Successfully!`, "#22c55e");
+      } else {
+        showBanner(`⚖️ Partial settlement complete! ₦${Number(refundAmount).toLocaleString()} refunded to customer, ₦${Number(diagnosticFee).toLocaleString()} retained for technician.`, "#22c55e");
+      }
+
+      setSettlementTicket(null);
+      loadData();
+    } catch (err) {
+      console.error("Settlement error:", err);
+      showBanner(`Settlement Error: ${err.message}`, "#ef4444");
+      throw err;
     }
   };
 
@@ -2063,6 +2158,11 @@ export default function HelpdeskAI() {
                                 100% REFUNDED
                               </span>
                             )}
+                            {t.payment_status === "PARTIALLY_REFUNDED" && (
+                              <span className="text-[10px] font-bold bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20">
+                                ⚖️ PARTIALLY SETTLED (Refunded ₦{Number(t.refunded_amount || 0).toLocaleString()})
+                              </span>
+                            )}
                             {t.sla_breached && (
                               <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20 animate-pulse">
                                 SLA Breached
@@ -2147,14 +2247,15 @@ export default function HelpdeskAI() {
                             </button>
                           )}
 
-                          {/* 1-Click Paystack Refund Button for Paid Unresolved Tickets (Admin Only) */}
+                          {/* Universal Resolution Review & Settle (Admin Only for Paid Tickets) */}
                           {userRole === "admin" && t.payment_status === "PAID" && (
                             <button
-                              onClick={() => handleProcessRefund(t)}
-                              className="bg-rose-950/60 hover:bg-rose-900 border border-rose-700/60 text-rose-300 text-xs px-2.5 py-1.5 rounded-lg transition-colors font-medium flex items-center gap-1"
-                              title="Issue 100% full refund via Paystack directly to customer"
+                              onClick={() => setSettlementTicket(t)}
+                              className="bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 text-xs px-2.5 py-1.5 rounded-lg transition-colors font-medium flex items-center gap-1.5 shadow-sm"
+                              title="Review outcome & settle: Confirm resolved, 100% full refund, or partial call-out/diagnostic fee"
                             >
-                              <span>💸 Issue Refund</span>
+                              <Scale className="w-3.5 h-3.5 text-indigo-400" />
+                              <span>Review & Settle (₦{Number(t.payment_amount || 0).toLocaleString()})</span>
                             </button>
                           )}
 
@@ -2712,6 +2813,32 @@ export default function HelpdeskAI() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Universal Ticket Resolution Settlement Modal */}
+      {settlementTicket && (
+        <Suspense fallback={null}>
+          <TicketSettlementModal
+            isOpen={Boolean(settlementTicket)}
+            ticket={settlementTicket}
+            onClose={() => setSettlementTicket(null)}
+            onSettle={handleProcessSettlement}
+          />
+        </Suspense>
+      )}
+
+      {/* Mandatory MFA Enrollment Modal for Enforced Workspaces */}
+      {showMandatoryMfaEnroll && (
+        <Suspense fallback={null}>
+          <MfaEnrollModal
+            isOpen={showMandatoryMfaEnroll}
+            isMandatory={true}
+            onSuccess={() => {
+              setShowMandatoryMfaEnroll(false);
+              showBanner("🛡️ Two-Factor Authentication successfully enrolled!", "#22c55e");
+            }}
+          />
+        </Suspense>
       )}
     </div>
   );

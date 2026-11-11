@@ -3,9 +3,12 @@ import {
   Settings, Phone, Mail, Clock, Upload, CheckCircle2, AlertCircle, 
   Save, LifeBuoy, Send, MessageSquare, Sparkles, X, ExternalLink, 
   Plus, BookOpen, Trash2, Tag, ListOrdered, FileText, ChevronDown, ChevronUp,
-  Download, FileSpreadsheet, Globe, ToggleLeft, ToggleRight
+  Download, FileSpreadsheet, Globe, ToggleLeft, ToggleRight,
+  ShieldCheck, Smartphone, KeyRound, ShieldAlert
 } from "lucide-react";
+import { supabase } from "../supabase";
 import { sendEmailViaResend } from "../engine/emailDispatcher";
+import MfaEnrollModal from "./MfaEnrollModal";
 
 export default function CompanySettings({ 
   orgConfig, 
@@ -27,8 +30,45 @@ export default function CompanySettings({
     incident_sla_minutes: orgConfig?.incident_sla_minutes || 10,
     ticket_sla_hours: orgConfig?.ticket_sla_hours || 1,
     vpn_gateway: orgConfig?.vpn_gateway || "vpn.company.com",
-    enable_global_kb: orgConfig?.enable_global_kb === true
+    enable_global_kb: orgConfig?.enable_global_kb === true,
+    enforce_mfa: orgConfig?.enforce_mfa === true
   });
+
+  // 2FA / MFA Management States
+  const [showMfaEnroll, setShowMfaEnroll] = useState(false);
+  const [mfaStatus, setMfaStatus] = useState("loading"); // 'enabled' | 'disabled' | 'loading'
+  const [activeMfaFactor, setActiveMfaFactor] = useState(null);
+
+  const checkMfaStatus = async () => {
+    try {
+      const { data } = await supabase.auth.mfa.listFactors();
+      const verified = data?.totp?.find(f => f.status === "verified");
+      if (verified) {
+        setMfaStatus("enabled");
+        setActiveMfaFactor(verified);
+      } else {
+        setMfaStatus("disabled");
+        setActiveMfaFactor(null);
+      }
+    } catch (_) {
+      setMfaStatus("disabled");
+    }
+  };
+
+  useEffect(() => {
+    checkMfaStatus();
+  }, []);
+
+  const handleDisableMfa = async () => {
+    if (!activeMfaFactor) return;
+    if (!window.confirm("Are you sure you want to remove your authenticator device? You will no longer be prompted for 2FA on login.")) return;
+    try {
+      await supabase.auth.mfa.unenroll({ factorId: activeMfaFactor.id });
+      await checkMfaStatus();
+    } catch (err) {
+      alert("Failed to unenroll 2FA: " + err.message);
+    }
+  };
 
   // Custom KB Article Direct Authoring States
   const [showAddArticleModal, setShowAddArticleModal] = useState(false);
@@ -63,7 +103,8 @@ export default function CompanySettings({
         incident_sla_minutes: orgConfig.incident_sla_minutes || prev.incident_sla_minutes,
         ticket_sla_hours: orgConfig.ticket_sla_hours || prev.ticket_sla_hours,
         vpn_gateway: orgConfig.vpn_gateway || prev.vpn_gateway,
-        enable_global_kb: orgConfig.enable_global_kb !== undefined ? orgConfig.enable_global_kb : prev.enable_global_kb
+        enable_global_kb: orgConfig.enable_global_kb !== undefined ? orgConfig.enable_global_kb : prev.enable_global_kb,
+        enforce_mfa: orgConfig.enforce_mfa !== undefined ? orgConfig.enforce_mfa : prev.enforce_mfa
       }));
     }
   }, [orgConfig]);
@@ -447,6 +488,98 @@ export default function CompanySettings({
               <p className="text-[11px] text-slate-500 mt-2">
                 Mark open tickets with red SLA Breached badge and alert managers if unresolved.
               </p>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Security & Multi-Factor Authentication (MFA / 2FA) ── */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-100 text-sm">Security &amp; Multi-Factor Authentication (2FA)</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Protect your corporate IT workspace with time-based one-time passwords (TOTP) compatible with Microsoft and Google Authenticator.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* My Personal 2FA Status */}
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-slate-200">My Authenticator Status</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border ${
+                    mfaStatus === "enabled"
+                      ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                      : "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                  }`}>
+                    {mfaStatus === "enabled" ? "Active (2FA Protected)" : "Not Configured"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  {mfaStatus === "enabled"
+                    ? "Your account is protected by an authenticator device. A 6-digit code is required on every login."
+                    : "Add Microsoft or Google Authenticator to protect your login with a 6-digit security code."}
+                </p>
+              </div>
+
+              <div className="pt-2">
+                {mfaStatus === "enabled" ? (
+                  <button
+                    type="button"
+                    onClick={handleDisableMfa}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-500/10 hover:border-rose-500/40 hover:text-rose-300 text-slate-300 text-xs font-medium border border-slate-700 transition-all flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Reconfigure / Remove Authenticator</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowMfaEnroll(true)}
+                    className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5"
+                  >
+                    <Smartphone className="w-3.5 h-3.5" />
+                    <span>Setup Authenticator App (QR Code)</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Workspace-Wide Policy (Admin Only) */}
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-slate-200">Company-Wide Policy</span>
+                  <span className="text-[10px] font-semibold text-slate-500">ISO 27001 / PCI-DSS</span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Require all staff members and technicians across your organization to enroll an authenticator app upon login.
+                </p>
+              </div>
+
+              <div className="pt-2 flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-300">Enforce 2FA for All Members</span>
+                <button
+                  type="button"
+                  onClick={() => setForm(prev => ({ ...prev, enforce_mfa: !prev.enforce_mfa }))}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                    form.enforce_mfa ? "bg-indigo-600" : "bg-slate-700"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                      form.enforce_mfa ? "translate-x-4" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -962,6 +1095,18 @@ export default function CompanySettings({
             )}
           </div>
         </div>
+      )}
+
+      {/* 2FA Enrollment Modal */}
+      {showMfaEnroll && (
+        <MfaEnrollModal
+          isOpen={showMfaEnroll}
+          onClose={() => setShowMfaEnroll(false)}
+          onSuccess={async () => {
+            setShowMfaEnroll(false);
+            await checkMfaStatus();
+          }}
+        />
       )}
     </div>
   );
