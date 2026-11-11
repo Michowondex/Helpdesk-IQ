@@ -38,6 +38,7 @@ const isConsumerEmail = (email) => {
 export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [accountType, setAccountType] = useState("business"); // 'business' | 'individual'
+  const [workspaceMode, setWorkspaceMode] = useState("ENTERPRISE"); // 'ENTERPRISE' | 'COMMERCIAL'
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   
   const [email, setEmail] = useState("");
@@ -193,6 +194,7 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
               full_name: fullName.trim() || cleanEmail.split("@")[0],
               company_name: finalCompanyName,
               account_type: accountType, // 'business' | 'individual'
+              workspace_mode: accountType === "business" ? workspaceMode : "COMMERCIAL",
               role: "admin"
             }
           }
@@ -405,6 +407,56 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
                     Individual / Personal
                   </button>
                 </div>
+
+                {/* Organization Operating Model Selection (Business accounts only) */}
+                {accountType === "business" && (
+                  <div className="mt-3.5 p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                      Organization Operating Model *
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setWorkspaceMode("ENTERPRISE")}
+                        className={`p-2.5 rounded-lg border text-left transition-all flex flex-col justify-between ${
+                          workspaceMode === "ENTERPRISE"
+                            ? "bg-indigo-600/15 border-indigo-500 text-white shadow-sm"
+                            : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-bold text-xs flex items-center gap-1.5 text-indigo-300">
+                            🏦 Internal Enterprise IT
+                          </span>
+                          {workspaceMode === "ENTERPRISE" && <Check className="w-3.5 h-3.5 text-indigo-400 shrink-0" />}
+                        </div>
+                        <span className="text-[10px] text-slate-400 leading-tight">
+                          Banks, Hospitals, Corporates. Free internal staff self-service.
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setWorkspaceMode("COMMERCIAL")}
+                        className={`p-2.5 rounded-lg border text-left transition-all flex flex-col justify-between ${
+                          workspaceMode === "COMMERCIAL"
+                            ? "bg-indigo-600/15 border-indigo-500 text-white shadow-sm"
+                            : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-bold text-xs flex items-center gap-1.5 text-indigo-300">
+                            🛠️ IT Service / MSP
+                          </span>
+                          {workspaceMode === "COMMERCIAL" && <Check className="w-3.5 h-3.5 text-indigo-400 shrink-0" />}
+                        </div>
+                        <span className="text-[10px] text-slate-400 leading-tight">
+                          IT firms & vendors. Provide paid support to external clients.
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

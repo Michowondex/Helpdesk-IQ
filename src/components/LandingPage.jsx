@@ -9,6 +9,7 @@
  * - Seamless in-app onboarding integration via onGoToApp prop
  */
 import { useState } from 'react'
+import DemoRequestModal from './DemoRequestModal'
 import './landing.css'
 import { ChatVisual, TicketVisual, EscalationVisual, MonitorVisual } from './Visuals'
 import LandingChatbot from './LandingChatbot'
@@ -141,6 +142,7 @@ function PlanCard({ plan, yearly, onGoToApp }) {
 
 export default function LandingPage({ onGoToApp }) {
   const [yearly, setYearly] = useState(false)
+  const [showDemoModal, setShowDemoModal] = useState(false)
 
   const handleCtaClick = (e) => {
     if (onGoToApp) {
@@ -160,7 +162,17 @@ export default function LandingPage({ onGoToApp }) {
             <a href="#pricing">Pricing</a>
             <a href="#contact">Contact</a>
           </div>
-          <a className="btn p" href={APP_URL} onClick={handleCtaClick} style={{ padding: '10px 18px', fontSize: 14 }}>Start Free Trial</a>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => { setShowDemoModal(true); setDemoSuccess(false); setDemoError(""); }}
+              className="btn g"
+              style={{ padding: '9px 15px', fontSize: 13, cursor: 'pointer' }}
+            >
+              Request a Demo
+            </button>
+            <a className="btn p" href={APP_URL} onClick={handleCtaClick} style={{ padding: '10px 18px', fontSize: 14 }}>Start Free Trial</a>
+          </div>
         </div>
       </nav>
 
@@ -174,6 +186,14 @@ export default function LandingPage({ onGoToApp }) {
           </p>
           <div className="cta">
             <a className="btn p" href={APP_URL} onClick={handleCtaClick}>Start Free Trial →</a>
+            <button
+              type="button"
+              onClick={() => { setShowDemoModal(true); setDemoSuccess(false); setDemoError(""); }}
+              className="btn g"
+              style={{ cursor: 'pointer', padding: '12px 20px', fontSize: 14 }}
+            >
+              Schedule a Demo
+            </button>
             <a className="btn g" href="#features">Explore features</a>
           </div>
           <div className="note">30-day free trial · No credit card required</div>
@@ -351,6 +371,12 @@ export default function LandingPage({ onGoToApp }) {
 
       {/* Floating Interactive Hybrid IT Assistant */}
       <LandingChatbot onGoToApp={onGoToApp} />
+
+      {/* Schedule a Live Demo Modal */}
+      <DemoRequestModal
+        isOpen={showDemoModal}
+        onClose={() => setShowDemoModal(false)}
+      />
     </div>
   )
 }

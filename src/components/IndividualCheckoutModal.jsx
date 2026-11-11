@@ -6,6 +6,7 @@ export default function IndividualCheckoutModal({
   userProfile,
   pendingContext,
   selectedOption, // 'whatsapp' | 'call' | 'ticket'
+  orgPricing,
   onClose,
   onPaymentSuccess
 }) {
@@ -20,17 +21,18 @@ export default function IndividualCheckoutModal({
   const [preferredTime, setPreferredTime] = useState("Morning (9 AM - 12 PM)");
   const [contactPhone, setContactPhone] = useState(userProfile?.phone || "");
 
-  // Pricing configuration
-  const REMOTE_PRICE = 3500;
+  // Pricing configuration (Pulls custom pricing if set by IT firm workspace, else uses platform defaults)
+  const REMOTE_PRICE = Number(orgPricing?.remote_fee) || 3500;
+  const BASE_PHYSICAL = Number(orgPricing?.physical_visit_fee) || 10000;
   const PHYSICAL_PRICES = {
-    "Lagos (Mainland)": 10000,
-    "Lagos (Island / Lekki)": 12000,
-    "Abuja": 12000,
-    "Port Harcourt": 12000,
-    "Other Locations": 15000
+    "Lagos (Mainland)": BASE_PHYSICAL,
+    "Lagos (Island / Lekki)": BASE_PHYSICAL + 2000,
+    "Abuja": BASE_PHYSICAL + 2000,
+    "Port Harcourt": BASE_PHYSICAL + 2000,
+    "Other Locations": BASE_PHYSICAL + 5000
   };
 
-  const finalAmount = supportType === "REMOTE" ? REMOTE_PRICE : (PHYSICAL_PRICES[city] || 12000);
+  const finalAmount = supportType === "REMOTE" ? REMOTE_PRICE : (PHYSICAL_PRICES[city] || BASE_PHYSICAL);
 
   // Initialize Paystack Inline Pop-up
   const handlePaystackCheckout = () => {
@@ -47,7 +49,7 @@ export default function IndividualCheckoutModal({
       }
     }
 
-    const paystackPublicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
+    const paystackPublicKey = orgPricing?.custom_paystack_public_key || import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
     if (!paystackPublicKey) {
       setErrorMsg("Payment gateway is temporarily unavailable (missing Public Key).");
       return;

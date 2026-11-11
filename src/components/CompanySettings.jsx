@@ -4,7 +4,7 @@ import {
   Save, LifeBuoy, Send, MessageSquare, Sparkles, X, ExternalLink, 
   Plus, BookOpen, Trash2, Tag, ListOrdered, FileText, ChevronDown, ChevronUp,
   Download, FileSpreadsheet, Globe, ToggleLeft, ToggleRight,
-  ShieldCheck, Smartphone, KeyRound, ShieldAlert
+  ShieldCheck, Smartphone, KeyRound, ShieldAlert, Building2, Copy, Check, DollarSign
 } from "lucide-react";
 import { supabase } from "../supabase";
 import { sendEmailViaResend } from "../engine/emailDispatcher";
@@ -31,8 +31,22 @@ export default function CompanySettings({
     ticket_sla_hours: orgConfig?.ticket_sla_hours || 1,
     vpn_gateway: orgConfig?.vpn_gateway || "vpn.company.com",
     enable_global_kb: orgConfig?.enable_global_kb === true,
-    enforce_mfa: orgConfig?.enforce_mfa === true
+    enforce_mfa: orgConfig?.enforce_mfa === true,
+    portal_slug: orgConfig?.portal_slug || "",
+    remote_fee: orgConfig?.remote_fee !== undefined ? orgConfig.remote_fee : 3500,
+    physical_visit_fee: orgConfig?.physical_visit_fee !== undefined ? orgConfig.physical_visit_fee : 10000
   });
+
+  const [copiedPortal, setCopiedPortal] = useState(false);
+  const portalSlug = orgConfig?.portal_slug || (orgConfig?.domain ? orgConfig.domain.split(".")[0] : orgConfig?.id || "support");
+  const portalUrl = typeof window !== "undefined" ? `${window.location.origin}/?portal=${portalSlug}` : "";
+
+  const copyPortalUrl = () => {
+    if (!portalUrl) return;
+    navigator.clipboard.writeText(portalUrl);
+    setCopiedPortal(true);
+    setTimeout(() => setCopiedPortal(false), 2500);
+  };
 
   // 2FA / MFA Management States
   const [showMfaEnroll, setShowMfaEnroll] = useState(false);
@@ -104,7 +118,10 @@ export default function CompanySettings({
         ticket_sla_hours: orgConfig.ticket_sla_hours || prev.ticket_sla_hours,
         vpn_gateway: orgConfig.vpn_gateway || prev.vpn_gateway,
         enable_global_kb: orgConfig.enable_global_kb !== undefined ? orgConfig.enable_global_kb : prev.enable_global_kb,
-        enforce_mfa: orgConfig.enforce_mfa !== undefined ? orgConfig.enforce_mfa : prev.enforce_mfa
+        enforce_mfa: orgConfig.enforce_mfa !== undefined ? orgConfig.enforce_mfa : prev.enforce_mfa,
+        portal_slug: orgConfig.portal_slug !== undefined ? orgConfig.portal_slug : prev.portal_slug,
+        remote_fee: orgConfig.remote_fee !== undefined ? orgConfig.remote_fee : prev.remote_fee,
+        physical_visit_fee: orgConfig.physical_visit_fee !== undefined ? orgConfig.physical_visit_fee : prev.physical_visit_fee
       }));
     }
   }, [orgConfig]);
@@ -363,6 +380,109 @@ export default function CompanySettings({
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Workspace Operating Model Card */}
+        {orgConfig?.workspace_mode === "ENTERPRISE" ? (
+          <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-start gap-3 shadow-sm">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+              <Building2 className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white">Internal Enterprise IT Mode</h3>
+                <span className="text-[10px] font-bold bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded border border-indigo-500/20">
+                  STAFF SELF-SERVICE
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                This organization is configured for internal employee support. All ticket submissions, Virtual IT AI assistance, and on-site office dispatches are 100% free for your company staff with zero payment barriers.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                  <Globe className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Dedicated Client Support Portal</h3>
+                  <p className="text-[11px] text-slate-400">Share this link with your customers to provide 24/7 branded Virtual IT Support</p>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded border border-emerald-500/20">
+                COMMERCIAL MSP
+              </span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">Your Public Client Portal URL</label>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 font-mono text-xs text-indigo-300 select-all truncate">
+                  {portalUrl}
+                </div>
+                <button
+                  type="button"
+                  onClick={copyPortalUrl}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
+                >
+                  {copiedPortal ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedPortal ? "Copied!" : "Copy Link"}</span>
+                </button>
+                <a
+                  href={portalUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs px-3 py-2 rounded-lg transition-colors flex items-center gap-1 shrink-0"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Preview</span>
+                </a>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1.5">
+                Embed this URL on your company website, in client email signatures, or send to customers via WhatsApp.
+              </p>
+            </div>
+
+            <div className="pt-2 border-t border-slate-800/80">
+              <h4 className="text-xs font-bold text-slate-200 mb-2.5 flex items-center gap-1.5">
+                <DollarSign className="w-3.5 h-3.5 text-amber-400" />
+                Client Service Pricing (What your clients pay)
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                    Remote Support Session Fee (₦)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.remote_fee}
+                    onChange={e => setForm({ ...form, remote_fee: Number(e.target.value) })}
+                    placeholder="3500"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
+                  />
+                  <span className="text-[10px] text-slate-500">Standard platform baseline: ₦3,500</span>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                    Physical On-Site Visit Fee (₦)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.physical_visit_fee}
+                    onChange={e => setForm({ ...form, physical_visit_fee: Number(e.target.value) })}
+                    placeholder="10000"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
+                  />
+                  <span className="text-[10px] text-slate-500">Standard platform baseline: ₦10,000</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Support Contacts Card */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
           <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">

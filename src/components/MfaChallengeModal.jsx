@@ -147,3 +147,4 @@ export default function MfaChallengeModal({ isOpen, factorId, userEmail, onSucce
     </div>
   );
 }
+

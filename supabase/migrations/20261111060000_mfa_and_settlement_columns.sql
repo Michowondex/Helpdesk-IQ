@@ -13,3 +13,4 @@ ALTER TABLE tickets
   ADD COLUMN IF NOT EXISTS settlement_note TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_tickets_settlement_status ON tickets (settlement_status);
+

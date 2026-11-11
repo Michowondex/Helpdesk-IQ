@@ -368,3 +368,86 @@ export async function sendWelcomeEmail(user, org) {
     fromEmail: "BizaDesk <helpdesk@bizadoc.com>"
   });
 }
+
+/**
+ * Dispatches an instant inbound demo notification to helpdesk@bizadoc.com
+ */
+export async function sendDemoRequestNotification(demoData) {
+  const { full_name, email, phone, company_name, org_type, message } = demoData;
+  const orgTypeLabel = org_type === "enterprise" 
+    ? "Internal Enterprise IT (Bank / Hospital / Corporate)" 
+    : org_type === "msp" 
+    ? "Commercial IT Service Provider (MSP / IT Firm)" 
+    : "General Organization";
+
+  const subject = `🚀 New Demo Request: ${company_name} (${org_type === "enterprise" ? "Enterprise" : "Commercial MSP"})`;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:24px;background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <div style="max-width:580px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+    <div style="background:linear-gradient(135deg,#1e1b4b,#312e81);padding:30px;color:#ffffff;text-align:center;">
+      <div style="font-size:32px;margin-bottom:8px;">🎯</div>
+      <h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.5px;">New Inbound Demo Request</h1>
+      <p style="margin:6px 0 0;font-size:13px;color:#cbd5e1;">A prospective client requested an executive product walkthrough</p>
+    </div>
+    
+    <div style="padding:28px 32px;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <tr>
+          <td style="padding:10px 0;color:#64748b;font-weight:600;width:140px;">Company / Org:</td>
+          <td style="padding:10px 0;color:#0f172a;font-weight:700;font-size:15px;">${company_name}</td>
+        </tr>
+        <tr style="border-top:1px solid #f1f5f9;">
+          <td style="padding:10px 0;color:#64748b;font-weight:600;">Contact Person:</td>
+          <td style="padding:10px 0;color:#0f172a;font-weight:600;">${full_name}</td>
+        </tr>
+        <tr style="border-top:1px solid #f1f5f9;">
+          <td style="padding:10px 0;color:#64748b;font-weight:600;">Corporate Email:</td>
+          <td style="padding:10px 0;"><a href="mailto:${email}" style="color:#4f46e5;font-weight:600;text-decoration:none;">${email}</a></td>
+        </tr>
+        <tr style="border-top:1px solid #f1f5f9;">
+          <td style="padding:10px 0;color:#64748b;font-weight:600;">Phone Number:</td>
+          <td style="padding:10px 0;color:#0f172a;font-weight:600;">${phone || "Not provided"}</td>
+        </tr>
+        <tr style="border-top:1px solid #f1f5f9;">
+          <td style="padding:10px 0;color:#64748b;font-weight:600;">Organization Type:</td>
+          <td style="padding:10px 0;">
+            <span style="display:inline-block;padding:4px 10px;background:#eef2ff;color:#4f46e5;border-radius:6px;font-weight:700;font-size:12px;">
+              ${orgTypeLabel}
+            </span>
+          </td>
+        </tr>
+        ${message ? `
+        <tr style="border-top:1px solid #f1f5f9;">
+          <td style="padding:10px 0;color:#64748b;font-weight:600;vertical-align:top;">Requirements:</td>
+          <td style="padding:10px 0;color:#334155;line-height:1.5;background:#f8fafc;padding:12px;border-radius:8px;">${message}</td>
+        </tr>` : ""}
+      </table>
+
+      <div style="margin-top:28px;text-align:center;">
+        <a href="mailto:${email}?subject=BizaDesk Demo Walkthrough for ${encodeURIComponent(company_name)}" style="display:inline-block;background:#4f46e5;color:#ffffff;padding:12px 28px;border-radius:10px;font-weight:700;font-size:13px;text-decoration:none;">
+          Reply to ${full_name} →
+        </a>
+      </div>
+    </div>
+
+    <div style="background:#f8fafc;padding:16px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;">
+      BizaDesk Executive Lead Engine • Captured on desk.bizadoc.com at ${new Date().toUTCString()}
+    </div>
+  </div>
+</body>
+</html>
+  `;
+
+  const plainText = `NEW DEMO REQUEST\n\nCompany: ${company_name}\nContact: ${full_name}\nEmail: ${email}\nPhone: ${phone || "N/A"}\nOrg Type: ${orgTypeLabel}\n\nRequirements:\n${message || "No specific message provided"}\n\nCaptured at: ${new Date().toISOString()}`;
+
+  return sendEmailViaResend({
+    to: "helpdesk@bizadoc.com",
+    subject,
+    body: plainText,
+    html,
+    fromEmail: "BizaDesk Leads <helpdesk@bizadoc.com>"
+  });
+}

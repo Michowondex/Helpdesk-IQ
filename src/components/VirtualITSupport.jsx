@@ -147,15 +147,17 @@ export default function VirtualITSupport({
   };
 
   // Handles the 3 escalation options (Ticket Only, WhatsApp, Direct Call)
-  // For Individual users: Opens Paystack checkout first!
+  // For Individual users / Paid Portals: Opens Paystack checkout first unless Enterprise Mode!
   const handleSelectThreeWayOption = async (optionType, context) => {
-    // If Individual user, trigger Paystack checkout modal before creating ticket
-    if (accountType === "individual") {
+    // Enterprise IT mode (Banks, Corporates) is strictly 100% free internal support
+    const isEnterprise = orgConfig?.workspace_mode === "ENTERPRISE";
+
+    if (!isEnterprise && accountType === "individual") {
       setCheckoutModal({ option: optionType, context });
       return;
     }
 
-    // Business users continue free of charge
+    // Enterprise / internal corporate users continue free of charge
     await processTicketDispatch(optionType, context, {
       paymentStatus: "FREE",
       paymentAmount: 0,
@@ -735,6 +737,7 @@ export default function VirtualITSupport({
           userProfile={currentUserProfile}
           pendingContext={checkoutModal.context}
           selectedOption={checkoutModal.option}
+          orgPricing={orgConfig}
           onClose={() => setCheckoutModal(null)}
           onPaymentSuccess={(paymentInfo) => {
             const { option, context } = checkoutModal;

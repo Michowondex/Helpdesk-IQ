@@ -221,3 +221,4 @@ export default function MfaEnrollModal({ isOpen, isMandatory = false, onClose, o
     </div>
   );
 }
+

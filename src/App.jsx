@@ -171,6 +171,45 @@ export default function HelpdeskAI() {
     );
   });
 
+  // ── Dedicated White-Label Customer Support Portal state (?portal=slug) ──
+  const [portalSlug] = useState(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    return params.get("portal") || null;
+  });
+  const [portalOrg, setPortalOrg] = useState(null);
+  const [portalLoading, setPortalLoading] = useState(Boolean(portalSlug));
+
+  // Resolve Portal Org if ?portal= is in URL
+  useEffect(() => {
+    if (!portalSlug) {
+      setPortalLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    async function resolvePortal() {
+      try {
+        const { data } = await supabase
+          .from("organizations")
+          .select("*")
+          .or(`portal_slug.eq.${portalSlug},id.eq.${portalSlug}`)
+          .maybeSingle();
+
+        if (isMounted && data) {
+          setPortalOrg(data);
+        }
+      } catch (err) {
+        console.warn("Failed to load portal organization:", err);
+      } finally {
+        if (isMounted) setPortalLoading(false);
+      }
+    }
+
+    resolvePortal();
+    return () => { isMounted = false; };
+  }, [portalSlug]);
+
   // In-App Notification Center
   const [notifications, setNotifications] = useState([
     {
@@ -455,6 +494,9 @@ export default function HelpdeskAI() {
 
         if (companyName || accountType === "individual") {
           const workspaceName = companyName?.trim() || `${user.user_metadata?.full_name || user.email.split("@")[0]}'s Workspace`;
+          const rawSlug = userDomain && userDomain.includes(".") 
+            ? userDomain.split(".")[0].toLowerCase() 
+            : (companyName ? companyName.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-") : `ws-${Date.now().toString(36)}`);
           
           // Create workspace organization record
           const { data: newOrg } = await supabase
@@ -468,6 +510,10 @@ export default function HelpdeskAI() {
               incident_sla_minutes: 10,
               ticket_sla_hours: 1,
               enable_global_kb: accountType === "individual" ? true : false,
+              workspace_mode: user.user_metadata?.workspace_mode || (accountType === "business" ? "ENTERPRISE" : "COMMERCIAL"),
+              portal_slug: rawSlug,
+              remote_fee: 3500,
+              physical_visit_fee: 10000,
               // Auto-flag as Master Workspace if the owner registers with the platform domain
               is_master_org: accountType === "business" && userDomain === PLATFORM_MASTER_DOMAIN
             })
@@ -1324,7 +1370,7 @@ export default function HelpdeskAI() {
 
   // ── Universal Ticket Resolution Settlement (Admin Only) ─────────────────
   const handleProcessSettlement = async (settlement) => {
-    const { action, ticketId, diagnosticFee, refundAmount, reasonNote, paystackRef } = settlement;
+    const { action, ticketId, diagnosticFee, refundAmount, reasonNote, paystackRef, refundRef } = settlement;
     const targetTicket = tickets.find(t => t.id === ticketId) || settlementTicket;
 
     try {
@@ -1336,6 +1382,25 @@ export default function HelpdeskAI() {
         }).eq("id", ticketId);
 
         showBanner(`✅ Ticket ${ticketId} resolved and confirmed closed!`, "#22c55e");
+        setSettlementTicket(null);
+        loadData();
+        return;
+      }
+
+      // If a manual Paystack refund reference is provided (e.g. from an IT firm)
+      if (refundRef && refundRef.startsWith("RFD_")) {
+        const newPaymentStatus = action === "FULL_REFUND" ? "REFUNDED" : "PARTIALLY_REFUNDED";
+        await supabase.from("tickets").update({
+          payment_status: newPaymentStatus,
+          refunded_amount: refundAmount,
+          settlement_status: action,
+          settlement_note: reasonNote || `Admin settled with refund (Ref: ${refundRef})`,
+          refund_ref: refundRef,
+          refunded_at: new Date().toISOString(),
+          status: "RESOLVED"
+        }).eq("id", ticketId);
+
+        showBanner(`💸 Settlement recorded! Paystack Refund Ref: ${refundRef}`, "#22c55e");
         setSettlementTicket(null);
         loadData();
         return;
@@ -1605,6 +1670,72 @@ export default function HelpdeskAI() {
           }}
           onBackToLanding={() => setShowAuthScreen(false)}
         />
+      );
+    }
+
+    // White-Label Customer Support Portal for Commercial IT firms
+    if (portalOrg) {
+      return (
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+          {/* Branded Header */}
+          <header className="border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-400 flex items-center justify-center text-white shadow-md font-bold overflow-hidden">
+                {portalOrg.logo_url ? (
+                  <img src={portalOrg.logo_url} alt={portalOrg.name} className="w-full h-full object-cover" />
+                ) : (
+                  <Bot className="w-5 h-5" />
+                )}
+              </div>
+              <div>
+                <h1 className="text-sm font-bold text-white tracking-tight leading-none">{portalOrg.name}</h1>
+                <p className="text-[10px] text-slate-400 mt-1">24/7 Virtual IT Support &amp; Incident Desk</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowAuthScreen(true)}
+                className="text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-lg border border-slate-800 transition-colors"
+              >
+                Staff Login →
+              </button>
+            </div>
+          </header>
+
+          {/* Portal Body: Direct Virtual IT Support */}
+          <main className="flex-1 max-w-4xl w-full mx-auto p-4 md:p-6">
+            <VirtualITSupport
+              incidents={[]}
+              services={[]}
+              customArticles={customArticles}
+              orgConfig={portalOrg}
+              userRole="user"
+              accountType="individual"
+              currentUser={null}
+              currentUserProfile={null}
+              onSubmitTicket={async (ticketPayload) => {
+                const { data, error } = await supabase
+                  .from("tickets")
+                  .insert({
+                    ...ticketPayload,
+                    org_id: portalOrg.id
+                  })
+                  .select()
+                  .single();
+                if (error) throw error;
+                showBanner(`✅ Support Ticket ${data.id} logged with ${portalOrg.name}!`, "#22c55e");
+                return data;
+              }}
+            />
+          </main>
+
+          {/* Subtle Whitelabel Footer */}
+          <footer className="py-4 text-center border-t border-slate-800/60 text-[11px] text-slate-500">
+            <span>Powered by BizaDesk</span> • <span>Enterprise IT Service Cloud</span>
+          </footer>
+        </div>
       );
     }
 
@@ -2146,19 +2277,19 @@ export default function HelpdeskAI() {
                               {t.priority}
                             </span>
 
-                            {/* Payment & Visit Badge */}
-                            {t.payment_status === "PAID" && (
+                            {/* Payment & Visit Badge (Commercial mode only) */}
+                            {orgConfig?.workspace_mode !== "ENTERPRISE" && t.payment_status === "PAID" && (
                               <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1">
                                 ₦{Number(t.payment_amount || 0).toLocaleString()} PAID
                                 {t.support_type === "PHYSICAL_VISIT" && " (On-Site Visit)"}
                               </span>
                             )}
-                            {t.payment_status === "REFUNDED" && (
+                            {orgConfig?.workspace_mode !== "ENTERPRISE" && t.payment_status === "REFUNDED" && (
                               <span className="text-[10px] font-bold bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded border border-rose-500/20">
                                 100% REFUNDED
                               </span>
                             )}
-                            {t.payment_status === "PARTIALLY_REFUNDED" && (
+                            {orgConfig?.workspace_mode !== "ENTERPRISE" && t.payment_status === "PARTIALLY_REFUNDED" && (
                               <span className="text-[10px] font-bold bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20">
                                 ⚖️ PARTIALLY SETTLED (Refunded ₦{Number(t.refunded_amount || 0).toLocaleString()})
                               </span>
@@ -2247,8 +2378,8 @@ export default function HelpdeskAI() {
                             </button>
                           )}
 
-                          {/* Universal Resolution Review & Settle (Admin Only for Paid Tickets) */}
-                          {userRole === "admin" && t.payment_status === "PAID" && (
+                          {/* Universal Resolution Review & Settle (Admin Only for Paid Tickets in Commercial Mode) */}
+                          {userRole === "admin" && orgConfig?.workspace_mode !== "ENTERPRISE" && t.payment_status === "PAID" && (
                             <button
                               onClick={() => setSettlementTicket(t)}
                               className="bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 text-xs px-2.5 py-1.5 rounded-lg transition-colors font-medium flex items-center gap-1.5 shadow-sm"

@@ -13,6 +13,7 @@ export default function TicketSettlementModal({ isOpen, ticket, onClose, onSettl
   const [selectedAction, setSelectedAction] = useState("CONFIRM_RESOLVED"); // 'CONFIRM_RESOLVED' | 'FULL_REFUND' | 'PARTIAL_REFUND'
   const [diagnosticFee, setDiagnosticFee] = useState(defaultDiagnosticFee);
   const [reasonNote, setReasonNote] = useState("");
+  const [refundRefInput, setRefundRefInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -47,6 +48,7 @@ export default function TicketSettlementModal({ isOpen, ticket, onClose, onSettl
           diagnosticFee: selectedAction === "PARTIAL_REFUND" ? Number(diagnosticFee) : 0,
           refundAmount: calculatedRefundAmount,
           reasonNote: reasonNote.trim(),
+          refundRef: refundRefInput.trim(),
           paystackRef: ticket.paystack_ref
         });
       }
@@ -226,6 +228,29 @@ export default function TicketSettlementModal({ isOpen, ticket, onClose, onSettl
             </div>
           )}
 
+          {/* Paystack Refund Reference & Instructions (Anti-Fraud Tracking) */}
+          {(selectedAction === "FULL_REFUND" || selectedAction === "PARTIAL_REFUND") && (
+            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-200">
+                    Paystack Refund Reference / ID (Audit Log)
+                  </label>
+                  <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
+                    Search ref <code className="text-indigo-300 font-mono font-bold">{ticket.paystack_ref || "N/A"}</code> on Paystack, process ₦{calculatedRefundAmount.toLocaleString()} refund, and paste the generated <span className="font-mono text-slate-300">RFD_...</span> reference below for customer notification.
+                  </p>
+                </div>
+              </div>
+              <input
+                type="text"
+                placeholder="e.g. RFD_839201948 or auto-process"
+                value={refundRefInput}
+                onChange={(e) => setRefundRefInput(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+          )}
+
           {errorMsg && (
             <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -271,3 +296,4 @@ export default function TicketSettlementModal({ isOpen, ticket, onClose, onSettl
     </div>
   );
 }
+
