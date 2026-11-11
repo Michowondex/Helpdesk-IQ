@@ -563,6 +563,33 @@ export default function HelpdeskAI() {
     setCurrentUserProfile(null);
   };
 
+  // ── PCI-DSS / ISO 27001 Inactivity Session Timeout (15 minutes) ──────
+  // Automatically signs the user out after 15 minutes of inactivity for security compliance
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+    let idleTimer = null;
+
+    const resetIdleTimer = () => {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(async () => {
+        await handleSignOut();
+        setShowAuthScreen(true);
+        showBanner("🔒 Session Expired: Signed out after 15 minutes of inactivity for security compliance.", "#f97316");
+      }, IDLE_TIMEOUT_MS);
+    };
+
+    const activityEvents = ["mousedown", "keydown", "scroll", "touchstart", "click"];
+    activityEvents.forEach(evt => window.addEventListener(evt, resetIdleTimer, { passive: true }));
+    resetIdleTimer();
+
+    return () => {
+      clearTimeout(idleTimer);
+      activityEvents.forEach(evt => window.removeEventListener(evt, resetIdleTimer));
+    };
+  }, [currentUser]);
+
   const handleChangePassword = async (e) => {
     e.preventDefault();
     setCpError("");
@@ -1502,6 +1529,53 @@ export default function HelpdeskAI() {
     );
   }
 
+  // ── 30-Day Free Trial & Subscription Enforcement ───────────────────
+  const isBusinessAccount = !isIndividualAccount;
+  const trialEndTs = subscription?.trial_end
+    ? new Date(subscription.trial_end).getTime()
+    : Date.now() + 30 * 86400000;
+  const now = Date.now();
+  const daysRemaining = Math.ceil((trialEndTs - now) / 86400000);
+  const isSubscriptionActive = subscription?.status === "ACTIVE" || subscription?.status === "PAID";
+  
+  // Trial expired if business account, not active and days remaining <= 0
+  const isTrialExpired = isBusinessAccount && !isSubscriptionActive && daysRemaining <= 0;
+  // Grace period: days 0, -1, -2, -3 (up to 3 days after expiry)
+  const isGracePeriod = isTrialExpired && daysRemaining >= -3;
+  // Hard locked: 4+ days past expiry
+  const isHardLocked = isTrialExpired && daysRemaining < -3;
+
+  if (isHardLocked && currentUser) {
+    if (userRole !== "admin") {
+      return (
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-center">
+          <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-slate-100">Workspace Access Paused</h2>
+              <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                The <strong className="text-slate-200">{orgConfig?.name || "Corporate"}</strong> 30-day free trial has expired. Please contact your workspace administrator to renew the subscription.
+              </p>
+            </div>
+            <div className="p-4 bg-slate-950 rounded-xl border border-slate-800/80 text-left text-xs space-y-2 text-slate-300">
+              <p className="font-semibold text-slate-400 uppercase tracking-wider text-[10px]">What to do next:</p>
+              <p>• Your Admin can log in anytime to activate a subscription via Paystack.</p>
+              <p>• All company tickets, knowledge base articles, and incident history are preserved safely.</p>
+            </div>
+            <button
+              onClick={handleSignOut}
+              className="w-full py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-all"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      );
+    }
+  }
+
   return (
     <div className={`min-h-screen ${theme === "light" ? "theme-light bg-slate-50 text-slate-900" : "theme-dark bg-slate-950 text-slate-100"} font-sans text-xs antialiased flex flex-col selection:bg-indigo-500 selection:text-white`}>
       {/* Proactive Disconnection & Outage Sensor */}
@@ -1517,6 +1591,25 @@ export default function HelpdeskAI() {
         </div>
       )}
 
+      {/* Trial Grace Period Warning Banner */}
+      {isGracePeriod && (
+        <div className="bg-amber-500/10 border-b border-amber-500/30 px-6 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-amber-300">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 shrink-0 text-amber-400" />
+            <span>
+              ⚠️ Your 30-day free trial expired {Math.abs(daysRemaining)} day{Math.abs(daysRemaining) > 1 ? "s" : ""} ago.
+              You have <strong>{Math.max(0, 3 + daysRemaining + 1)} grace day(s)</strong> remaining before workspace features are locked.
+            </span>
+          </div>
+          <button
+            onClick={() => setTab("billing")}
+            className="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition-all shrink-0 shadow-sm"
+          >
+            Activate Subscription →
+          </button>
+        </div>
+      )}
+
       {/* SaaS Header & Navigation Bar */}
       <header className="bg-slate-900/90 border-b border-slate-800/80 sticky top-0 z-40 backdrop-blur-md px-6 py-3">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
@@ -1527,7 +1620,9 @@ export default function HelpdeskAI() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-sm tracking-tight text-white">Biza<span className="text-indigo-400">Desk</span></span>
+                <span className={`font-extrabold text-sm tracking-tight ${theme === "light" ? "text-slate-900" : "text-white"}`}>
+                  Biza<span className={theme === "light" ? "text-indigo-600" : "text-indigo-400"}>Desk</span>
+                </span>
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
                   Enterprise
                 </span>

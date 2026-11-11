@@ -8,12 +8,27 @@
   to = "/index.html"
   status = 200
 
-# Security & CORS headers
+# ── Hardened Security & Compliance Headers ──────────────────────────
 [[headers]]
   for = "/*"
   [headers.values]
+    # Prevents SSL stripping attacks (enforces HTTPS for 1 year, all subdomains)
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
+
+    # Prevents clickjacking — no iframing of this app
     X-Frame-Options = "DENY"
-    X-XSS-Protection = "1; mode=block"
+
+    # Prevents MIME-type sniffing attacks
     X-Content-Type-Options = "nosniff"
+
+    # Legacy XSS filter for older IE/Edge browsers
+    X-XSS-Protection = "1; mode=block"
+
+    # Only send origin in referrer header on HTTPS requests
     Referrer-Policy = "strict-origin-when-cross-origin"
 
+    # Content Security Policy — allows app scripts, blocks inline injection
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://hcaptcha.com https://*.hcaptcha.com https://js.paystack.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openai.com https://openrouter.ai https://api.resend.com https://api.paystack.co; frame-src https://hcaptcha.com https://*.hcaptcha.com https://checkout.paystack.com; media-src 'self' blob:; font-src 'self' data:;"
+
+    # Device permissions — microphone allowed for Virtual IT voice input, camera blocked
+    Permissions-Policy = "camera=(), microphone=(self), geolocation=()"

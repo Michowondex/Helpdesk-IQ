@@ -152,13 +152,6 @@ export default function BillingSubscription({ subscription = {}, onUpgradePlan }
             >
               {processing ? "Processing..." : "Pay with Paystack (NGN / Cards)"}
             </button>
-            <button
-              onClick={() => handleCheckout("Enterprise", "stripe")}
-              disabled={processing}
-              className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs py-2 rounded-lg border border-slate-700 transition-colors"
-            >
-              Pay with Stripe / International USD
-            </button>
           </div>
         </div>
       </div>

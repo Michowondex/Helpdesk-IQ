@@ -491,7 +491,24 @@ div[class*="netlify-feedback"] {
 }
 
 .theme-light .text-slate-500 {
-  color: #64748b !important;
+  color: #475569 !important;
+}
+
+.theme-light .text-slate-600 {
+  color: #334155 !important;
+}
+
+.theme-light header .text-white,
+.theme-light h1.text-white,
+.theme-light h2.text-white,
+.theme-light h3.text-white,
+.theme-light h4.text-white,
+.theme-light span.text-white:not(button *) {
+  color: #0f172a !important;
+}
+
+.theme-light .text-indigo-400 {
+  color: #4f46e5 !important;
 }
 
 .theme-light input,

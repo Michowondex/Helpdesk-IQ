@@ -41,6 +41,7 @@ export default function VirtualITSupport({
   const [isListening, setIsListening] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [activeStepArticle, setActiveStepArticle] = useState(null);
+  const [voiceSessionActive, setVoiceSessionActive] = useState(false);
   const [showRemoteModal, setShowRemoteModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [voiceError, setVoiceError] = useState("");
@@ -83,6 +84,7 @@ export default function VirtualITSupport({
       recognizerRef.current = rec;
       rec.start();
       setIsListening(true);
+      setVoiceSessionActive(true);
     }
   };
 
@@ -576,9 +578,10 @@ export default function VirtualITSupport({
       {activeStepArticle && (
         <StepCardModal
           article={activeStepArticle}
-          onClose={() => setActiveStepArticle(null)}
-          onResolved={(art) => handleArticleFinished(art, true)}
-          onEscalate={(art) => handleArticleFinished(art, false)}
+          defaultAutoRead={voiceSessionActive}
+          onClose={() => { setActiveStepArticle(null); setVoiceSessionActive(false); }}
+          onResolved={(art) => { setActiveStepArticle(null); setVoiceSessionActive(false); handleArticleFinished(art, true); }}
+          onEscalate={(art) => { setActiveStepArticle(null); setVoiceSessionActive(false); handleArticleFinished(art, false); }}
         />
       )}
 

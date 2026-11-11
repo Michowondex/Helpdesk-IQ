@@ -73,6 +73,11 @@ export default function EmailSettings({ orgConfig, onSaveEmailConfig }) {
   const [footerEmail, setFooterEmail] = useState(existingFooter.support_email || orgConfig?.support_email || "helpdesk@bizadoc.com");
   const [footerPortalUrl, setFooterPortalUrl] = useState(existingFooter.portal_url || "https://desk.bizadoc.com");
   const [footerAddress, setFooterAddress] = useState(existingFooter.address || "Corporate HQ • Global IT Service Command");
+  const [includeDisclaimer, setIncludeDisclaimer] = useState(
+    existingFooter.include_disclaimer !== undefined 
+      ? Boolean(existingFooter.include_disclaimer) 
+      : Boolean(existingFooter.disclaimer !== "")
+  );
   const [footerDisclaimer, setFooterDisclaimer] = useState(existingFooter.disclaimer || DEFAULT_FOOTER_CONFIG.disclaimer);
 
   // Template State
@@ -154,7 +159,8 @@ export default function EmailSettings({ orgConfig, onSaveEmailConfig }) {
       support_email: footerEmail.trim(),
       portal_url: footerPortalUrl.trim(),
       address: footerAddress.trim(),
-      disclaimer: footerDisclaimer.trim()
+      include_disclaimer: includeDisclaimer,
+      disclaimer: includeDisclaimer ? footerDisclaimer.trim() : ""
     };
 
     const config = {
@@ -213,7 +219,7 @@ export default function EmailSettings({ orgConfig, onSaveEmailConfig }) {
           support_email: footerEmail,
           portal_url: footerPortalUrl,
           address: footerAddress,
-          disclaimer: footerDisclaimer
+          disclaimer: includeDisclaimer ? footerDisclaimer : ""
         }
       },
       details: [
@@ -757,17 +763,45 @@ export default function EmailSettings({ orgConfig, onSaveEmailConfig }) {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  Legal Confidentiality & Cogent Notice (Disclaimer)
-                </label>
-                <textarea
-                  rows={3}
-                  value={footerDisclaimer}
-                  onChange={e => setFooterDisclaimer(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-slate-300 focus:outline-none focus:border-indigo-500 leading-relaxed resize-y"
-                  placeholder="CONFIDENTIALITY NOTICE: This transmission is intended only for..."
-                />
+              <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-200 block">
+                      Include Legal Confidentiality &amp; Cogent Disclaimer
+                    </label>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Attach corporate confidentiality and IT compliance notice at the bottom of all outbound emails.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIncludeDisclaimer(!includeDisclaimer)}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                      includeDisclaimer ? "bg-indigo-600" : "bg-slate-700"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                        includeDisclaimer ? "translate-x-4" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {includeDisclaimer && (
+                  <div className="pt-2 border-t border-slate-800">
+                    <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                      Disclaimer Text (editable)
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={footerDisclaimer}
+                      onChange={e => setFooterDisclaimer(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs text-slate-300 focus:outline-none focus:border-indigo-500 leading-relaxed resize-y"
+                      placeholder="CONFIDENTIALITY NOTICE: This transmission is intended only for..."
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1059,7 +1093,7 @@ export default function EmailSettings({ orgConfig, onSaveEmailConfig }) {
                     {footerAddress}
                   </div>
                 )}
-                {footerDisclaimer && (
+                {includeDisclaimer && footerDisclaimer && (
                   <div className="text-[9px] text-slate-400 border-t border-dashed border-slate-200 pt-2 mt-2 leading-tight italic">
                     {footerDisclaimer}
                   </div>

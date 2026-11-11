@@ -92,6 +92,10 @@ export function generateBrandedHtmlEmail({
     ...(orgConfig?.email_footer || {})
   };
 
+  if (orgConfig?.email_footer?.include_disclaimer === false) {
+    footer.disclaimer = "";
+  }
+
   // Convert plain text newlines into HTML paragraphs/breaks safely
   const formattedBody = (bodyText || "")
     .replace(/&/g, "&amp;")

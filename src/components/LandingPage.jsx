@@ -166,7 +166,7 @@ export default function LandingPage({ onGoToApp }) {
 
       <header className="hero">
         <div className="wrap">
-          <div className="pill"><span className="dot" />Built for Nigerian businesses and beyond</div>
+          <div className="pill"><span className="dot" />Built for Modern Enterprises &amp; Fast-Growing Teams</div>
           <h1>Autonomous IT support, <span>on your command.</span></h1>
           <p className="lead">
             BizaDesk is the smart multi-tenant helpdesk that resolves incidents faster with AI-guided
