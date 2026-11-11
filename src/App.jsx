@@ -303,7 +303,7 @@ export default function HelpdeskAI() {
     const { data } = await supabase
       .from("organizations")
       .select("id")
-      .or(`domain.eq.${PLATFORM_MASTER_DOMAIN},is_master_org.eq.true`)
+      .eq("is_master_org", true)
       .limit(1)
       .maybeSingle();
     if (data?.id) {
@@ -475,6 +475,20 @@ export default function HelpdeskAI() {
     try {
       const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
       if (data) {
+        // If this user signed up with the platform master domain, ensure they belong to master org and have admin role
+        const userDomain = user.email && user.email.includes("@") ? user.email.split("@")[1].toLowerCase() : "";
+        const isMasterOwner = userDomain === PLATFORM_MASTER_DOMAIN;
+
+        if (isMasterOwner && data.role !== "admin") {
+          const { data: masterOrg } = await supabase.from("organizations").select("id").eq("is_master_org", true).maybeSingle();
+          if (masterOrg?.id) {
+            await supabase.from("profiles").update({ org_id: masterOrg.id, role: "admin", account_type: "business" }).eq("id", user.id);
+            data.org_id = masterOrg.id;
+            data.role = "admin";
+            data.account_type = "business";
+          }
+        }
+
         setCurrentUserProfile(data);
         if (data.org_id) {
           loadData(data.org_id);
@@ -506,7 +520,6 @@ export default function HelpdeskAI() {
             .from("organizations")
             .insert({
               name: workspaceName,
-              domain: accountType === "business" ? userDomain : null,
               support_email: user.email,
               support_phone: "+234 916 202 9201",
               allstaff_email: accountType === "business" ? `all-staff@${userDomain}` : user.email,
@@ -551,7 +564,8 @@ export default function HelpdeskAI() {
         }
 
         // Assigned role: Creator of workspace is admin; invited members receive their assigned role (default 'user')
-        const assignedRole = targetOrgId ? "admin" : (user.user_metadata?.role || "user");
+        const isMasterOwner = userDomain === PLATFORM_MASTER_DOMAIN;
+        const assignedRole = (targetOrgId || isMasterOwner) ? "admin" : (user.user_metadata?.role || "user");
 
         const fallbackProfile = {
           id: user.id,
@@ -560,7 +574,7 @@ export default function HelpdeskAI() {
           full_name: user.user_metadata?.full_name || user.email.split("@")[0],
           email: user.email,
           department: user.user_metadata?.department || (assignedRole === "admin" ? "IT Administration" : "General IT"),
-          account_type: user.user_metadata?.account_type || "business"  // persist so tab-gating works on every login
+          account_type: isMasterOwner ? "business" : (user.user_metadata?.account_type || "business")  // persist so tab-gating works on every login
         };
 
         try {
