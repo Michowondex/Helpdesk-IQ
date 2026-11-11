@@ -3,7 +3,8 @@ import {
   Bot, AlertTriangle, Ticket, Activity, Mail, Settings, CreditCard,
   Plus, CheckCircle2, RefreshCw, Trash2, Clock, ShieldAlert,
   ChevronRight, Building2, Flame, HelpCircle, LogOut, User, Users,
-  Monitor, Cpu, Globe, Sparkles, MessageSquare, KeyRound, X, Eye, EyeOff
+  Monitor, Cpu, Globe, Sparkles, MessageSquare, KeyRound, X, Eye, EyeOff,
+  Sun, Moon
 } from "lucide-react";
 import { supabase } from "./supabase";
 import VirtualITSupport from "./components/VirtualITSupport";
@@ -14,7 +15,14 @@ import NotificationBell from "./components/NotificationBell";
 import LiveClock from "./components/LiveClock";
 import { playNotificationChime } from "./engine/soundEffects";
 import { getSystemDiagnostics } from "./engine/diagnosticSensor";
-import { sendEmailViaResend, sendWelcomeEmail } from "./engine/emailDispatcher";
+import { 
+  sendEmailViaResend, 
+  sendWelcomeEmail, 
+  fillTemplate, 
+  generateBrandedHtmlEmail, 
+  DEFAULT_INCIDENT_TEMPLATES, 
+  DEFAULT_TICKET_TEMPLATES 
+} from "./engine/emailDispatcher";
 
 // Code splitting / Lazy-load heavy panels for faster initial bundle and instant page render
 const CompanySettings = lazy(() => import("./components/CompanySettings"));
@@ -119,6 +127,23 @@ export default function HelpdeskAI() {
   const [teams, setTeams] = useState([]);
   const [members, setMembers] = useState([]);
   const [settingsSubTab, setSettingsSubTab] = useState("company"); // 'company' | 'teams' | 'users'
+
+  // Light / Dark Theme State
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem("bizadesk_theme") || "dark";
+    } catch (_) {
+      return "dark";
+    }
+  });
+
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    try {
+      localStorage.setItem("bizadesk_theme", next);
+    } catch (_) {}
+  };
 
   // User Authentication & RBAC state
   const [currentUser, setCurrentUser] = useState(null);
@@ -677,6 +702,161 @@ export default function HelpdeskAI() {
     return "default";
   };
 
+  // ── Email Builder & Dispatch Helpers ─────────────────────────────────────
+  const APP_URL = import.meta.env.VITE_APP_URL || (typeof window !== "undefined" ? window.location.origin : "https://desk.bizadoc.com");
+
+  const saveEmail = async (data) => {
+    if (!data) return;
+    const payload = {
+      ...data,
+      org_id: orgConfig?.id || currentUserProfile?.org_id || null,
+      sent_at: Date.now()
+    };
+    await supabase.from("emails").insert(payload);
+
+    // If Resend is configured, also dispatch real email to recipient's inbox
+    if (orgConfig?.email_provider === "resend" && (orgConfig?.resend_api_key || orgConfig?.id)) {
+      sendEmailViaResend({
+        to: data.to_address,
+        subject: data.subject,
+        body: data.body,
+        html: data.html,
+        apiKey: orgConfig?.resend_api_key,
+        fromEmail: orgConfig?.resend_from_email,
+        orgId: orgConfig?.id
+      }).catch(err => console.warn("Background email dispatch notice:", err));
+    }
+  };
+
+  const buildEmail = (inc, emailType) => {
+    const ageMins = Math.floor((Date.now() - (inc.opened_at || Date.now())) / 60000);
+    const templateData = {
+      incident_id: inc.id,
+      title: inc.title,
+      application: inc.app,
+      severity: inc.severity,
+      team: inc.team,
+      time_open: String(ageMins),
+      time_detected: fmtTime(inc.opened_at || Date.now()),
+      resolved_by: inc.assignee || inc.team || "IT Operations",
+      company_name: orgConfig?.name || "Corporate",
+      description: inc.description || "System anomaly detected.",
+      portal_url: APP_URL
+    };
+
+    const rawTemplate = orgConfig?.email_templates?.[emailType] 
+      || DEFAULT_INCIDENT_TEMPLATES[emailType]?.body 
+      || DEFAULT_INCIDENT_TEMPLATES.initial.body;
+
+    const bodyText = fillTemplate(rawTemplate, templateData);
+
+    const subjects = {
+      initial: `[${inc.severity}] Incident Alert: ${inc.title} — ${inc.app}`,
+      manager_escalation: `[TIER 2 ESCALATION] Unresolved ${inc.severity} Incident: ${inc.title}`,
+      allstaff: `[URGENT ALL-STAFF OUTAGE] ${inc.title} — ${inc.app}`,
+      followup: `[FOLLOW-UP] Still Open: ${inc.title} (${inc.id})`,
+      resolution: `[RESOLVED] ${inc.title} — ${inc.id}`
+    };
+
+    const recipients = {
+      initial: `${inc.team.toLowerCase().replace(/ /g, "-")}@company.com`,
+      manager_escalation: orgConfig?.support_email || "helpdesk@bizadoc.com",
+      allstaff: orgConfig?.allstaff_email || "all-staff@company.com",
+      followup: `${inc.team.toLowerCase().replace(/ /g, "-")}@company.com`,
+      resolution: orgConfig?.allstaff_email || "all-staff@company.com"
+    };
+
+    const html = generateBrandedHtmlEmail({
+      title: subjects[emailType] || inc.title,
+      bodyText,
+      badgeText: `${inc.severity} INCIDENT NOTIFICATION`,
+      badgeColor: inc.severity === "CRITICAL" ? "#dc2626" : inc.severity === "HIGH" ? "#ea580c" : "#2563eb",
+      badgeBg: inc.severity === "CRITICAL" ? "#fef2f2" : inc.severity === "HIGH" ? "#fff7ed" : "#eff6ff",
+      badgeBorder: inc.severity === "CRITICAL" ? "#fecaca" : inc.severity === "HIGH" ? "#fed7aa" : "#bfdbfe",
+      orgConfig,
+      details: [
+        { label: "Incident ID", value: inc.id },
+        { label: "Service / App", value: inc.app },
+        { label: "Assigned Team", value: inc.team },
+        { label: "Status", value: emailType === "resolution" ? "RESOLVED" : "ACTIVE / OPEN" }
+      ]
+    });
+
+    return {
+      inc_id: inc.id,
+      email_type: emailType,
+      to_address: recipients[emailType] || "helpdesk@bizadoc.com",
+      subject: subjects[emailType] || `[${inc.severity}] Incident ${inc.id}`,
+      body: bodyText,
+      html
+    };
+  };
+
+  const buildTicketEmail = (ticket, emailType, extraNotes = "") => {
+    const templateData = {
+      ticket_id: ticket.id,
+      submitter: ticket.submitter || "Valued Employee",
+      title: ticket.title,
+      category: ticket.ticket_type || "General Support",
+      priority: ticket.priority || "MEDIUM",
+      assigned_to: ticket.assignee_name || "Assigned Technician",
+      status: ticket.status || "OPEN",
+      update_note: extraNotes || `Status updated to ${ticket.status}`,
+      resolution_note: extraNotes || "Issue has been resolved successfully.",
+      company_name: orgConfig?.name || "Corporate",
+      portal_url: APP_URL,
+      team: ticket.team || orgConfig?.email_footer?.team_name || "IT Helpdesk Team"
+    };
+
+    const rawTemplate = orgConfig?.email_templates?.[emailType] 
+      || DEFAULT_TICKET_TEMPLATES[emailType]?.body 
+      || DEFAULT_TICKET_TEMPLATES.ticket_created.body;
+
+    const bodyText = fillTemplate(rawTemplate, templateData);
+
+    const subjects = {
+      ticket_created: `[${ticket.id}] Support Request Received: ${ticket.title}`,
+      ticket_assigned: `[${ticket.id}] Assigned: ${ticket.title}`,
+      ticket_updated: `[${ticket.id}] Status Update: ${ticket.title}`,
+      ticket_resolved: `[${ticket.id}] RESOLVED: ${ticket.title}`
+    };
+
+    const html = generateBrandedHtmlEmail({
+      title: subjects[emailType] || `Ticket ${ticket.id}`,
+      bodyText,
+      badgeText: `${ticket.priority} TICKET`,
+      badgeColor: ticket.priority === "URGENT" || ticket.priority === "HIGH" ? "#dc2626" : "#2563eb",
+      badgeBg: ticket.priority === "URGENT" || ticket.priority === "HIGH" ? "#fef2f2" : "#eff6ff",
+      badgeBorder: ticket.priority === "URGENT" || ticket.priority === "HIGH" ? "#fecaca" : "#bfdbfe",
+      orgConfig,
+      details: [
+        { label: "Ticket ID", value: ticket.id },
+        { label: "Category", value: ticket.ticket_type || "General" },
+        { label: "Assigned To", value: ticket.assignee_name || "Unassigned" },
+        { label: "Status", value: ticket.status }
+      ]
+    });
+
+    let recipient = "";
+    if (emailType === "ticket_assigned") {
+      const techUser = members?.find(m => m.id === ticket.assigned_to);
+      recipient = techUser?.email || orgConfig?.support_email || "helpdesk@bizadoc.com";
+    } else {
+      recipient = (ticket.submitter && ticket.submitter.includes("@")) 
+        ? ticket.submitter 
+        : currentUser?.email || orgConfig?.support_email || "helpdesk@bizadoc.com";
+    }
+
+    return {
+      ticket_id: ticket.id,
+      email_type: emailType,
+      to_address: recipient,
+      subject: subjects[emailType] || `[${ticket.id}] ${ticket.title}`,
+      body: bodyText,
+      html
+    };
+  };
+
   // Multi-Tier Incident Escalation Ladder Check (Tier 1 -> Tier 2 -> Tier 3)
   useEffect(() => {
     const tier1ThresholdMs = (orgConfig.incident_sla_minutes || 10) * 60000;
@@ -691,17 +871,8 @@ export default function HelpdeskAI() {
 
         // ── Tier 2 Escalation (at 15 mins) ──────────────────────────────────
         if (age >= tier2ThresholdMs && currentTier < 2) {
-          const leadEmail = orgConfig.support_email || "helpdesk@bizadoc.com";
-          const emailData = {
-            org_id: orgConfig?.id || currentUserProfile?.org_id || null,
-            inc_id: inc.id,
-            email_type: "manager_escalation",
-            to_address: leadEmail,
-            subject: `[TIER 2 ESCALATION] Unresolved ${inc.severity} Incident: ${inc.title}`,
-            body: `Dear IT Leadership / Support Manager,\n\nIncident ${inc.id} has remained UNRESOLVED for ${Math.floor(age / 60000)} minutes.\n\nTITLE: ${inc.title}\nAPPLICATION: ${inc.app}\nSEVERITY: ${inc.severity}\nASSIGNED TEAM: ${inc.team}\n\nPlease step in or re-assign immediately.\n\nRegards,\nBizaDesk Escalation Engine`,
-            sent_at: Date.now()
-          };
-          await supabase.from("emails").insert(emailData);
+          const emailData = buildEmail(inc, "manager_escalation");
+          if (emailData) await saveEmail(emailData);
           await supabase.from("incidents").update({ escalation_tier: 2, status: "TIER2_ESCALATED" }).eq("id", inc.id);
           showBanner(`⚠️ Tier 2 Escalation: ${inc.id} escalated to IT Manager`, "#f97316");
           loadData();
@@ -711,21 +882,8 @@ export default function HelpdeskAI() {
         // ── Tier 3 Escalation (at 30+ mins) ─────────────────────────────────
         if (age >= tier3ThresholdMs && currentTier < 3) {
           const isCritical = inc.severity === "CRITICAL";
-          // Only broadcast to All-Staff if explicitly marked CRITICAL to avoid panic
-          const recipientEmail = isCritical 
-            ? (orgConfig.allstaff_email || "all-staff@company.com")
-            : "helpdesk@bizadoc.com";
-
-          const emailData = {
-            org_id: orgConfig?.id || currentUserProfile?.org_id || null,
-            inc_id: inc.id,
-            email_type: isCritical ? "allstaff" : "exec_notice",
-            to_address: recipientEmail,
-            subject: `[TIER 3 ${isCritical ? "ALL-STAFF OUTAGE" : "EXECUTIVE"}] ${inc.title}`,
-            body: `URGENT NOTICE:\n\nIncident ${inc.id} is still open after ${Math.floor(age / 60000)} minutes.\nAPPLICATION: ${inc.app}\nSEVERITY: ${inc.severity}\nSTATUS: MAXIMUM ESCALATION\n\n${isCritical ? "All company staff are being notified of this service disruption." : "Sent to IT executive oversight for immediate intervention."}\n\nBizaDesk System`,
-            sent_at: Date.now()
-          };
-          await supabase.from("emails").insert(emailData);
+          const emailData = buildEmail(inc, "allstaff");
+          if (emailData) await saveEmail(emailData);
           await supabase.from("incidents").update({ 
             escalation_tier: 3, 
             escalated: true, 
@@ -755,48 +913,6 @@ export default function HelpdeskAI() {
     }, 30000);
     return () => clearInterval(check);
   }, [tickets, orgConfig]);
-
-  const saveEmail = async (data) => {
-    const payload = {
-      ...data,
-      org_id: orgConfig?.id || currentUserProfile?.org_id || null,
-      sent_at: Date.now()
-    };
-    await supabase.from("emails").insert(payload);
-
-    // If Resend is configured, also dispatch real email to recipient's inbox
-    if (orgConfig?.email_provider === "resend" && (orgConfig?.resend_api_key || orgConfig?.id)) {
-      sendEmailViaResend({
-        to: data.to_address,
-        subject: data.subject,
-        body: data.body,
-        apiKey: orgConfig?.resend_api_key,
-        fromEmail: orgConfig?.resend_from_email,
-        orgId: orgConfig?.id
-      }).catch(err => console.warn("Background email dispatch notice:", err));
-    }
-  };
-
-  const buildEmail = (inc, emailType) => {
-    const templates = {
-      initial: {
-        to_address: `${inc.team.toLowerCase().replace(/ /g, "-")}@company.com`,
-        subject: `[${inc.severity}] Incident Alert: ${inc.title} — ${inc.app}`,
-        body: `Dear ${inc.team},\n\nAn automated incident has been detected.\n\nINCIDENT ID: ${inc.id}\nTITLE: ${inc.title}\nAPPLICATION: ${inc.app}\nSEVERITY: ${inc.severity}\nDETECTED AT: ${fmtTime(inc.opened_at)}\n\nDESCRIPTION:\n${inc.description}\n\nPLEASE TAKE IMMEDIATE ACTION.\n\nRegards,\nBizaDesk System`
-      },
-      followup: {
-        to_address: `${inc.team.toLowerCase().replace(/ /g, "-")}@company.com`,
-        subject: `[FOLLOW-UP] Still Open: ${inc.title} (${inc.id})`,
-        body: `Dear ${inc.team},\n\nIncident ${inc.id} remains UNRESOLVED.\nTime Open: ${Math.floor((Date.now() - inc.opened_at) / 60000)} minutes\n\nAll-staff alert will trigger if unresolved.\n\nRegards,\nBizaDesk System`
-      },
-      resolution: {
-        to_address: orgConfig.allstaff_email || "all-staff@company.com",
-        subject: `[RESOLVED] ${inc.title} — ${inc.id}`,
-        body: `Dear All,\n\nThe following incident has been RESOLVED.\n\nINCIDENT: ${inc.id}\nTITLE: ${inc.title}\nAPPLICATION: ${inc.app}\nRESOLVED BY: ${inc.assignee || inc.team}\nTIME TO RESOLVE: ${Math.floor((Date.now() - inc.opened_at) / 60000)} minutes\n\nAll systems are now operating normally.\n\nRegards,\nBizaDesk System`
-      }
-    };
-    return templates[emailType] ? { inc_id: inc.id, email_type: emailType, ...templates[emailType] } : null;
-  };
 
   const triggerIncident = async (formData) => {
     const id = `INC-${String(incidents.length + 1).padStart(3, "0")}`;
@@ -992,6 +1108,23 @@ export default function HelpdeskAI() {
     setNotifications(prev => [newNotif, ...prev]);
     playNotificationChime();
 
+    // Dispatch Outbound White-Label Ticket Emails
+    try {
+      const createdMail = buildTicketEmail(t, "ticket_created");
+      if (createdMail) await saveEmail(createdMail);
+    } catch (e) {
+      console.warn("Could not dispatch ticket created email:", e);
+    }
+
+    if (assignedTechId) {
+      try {
+        const assignedMail = buildTicketEmail(t, "ticket_assigned");
+        if (assignedMail) await saveEmail(assignedMail);
+      } catch (e) {
+        console.warn("Could not dispatch ticket assigned email:", e);
+      }
+    }
+
     setNewTicket(false);
     setTicketForm({
       title: "",
@@ -1056,6 +1189,19 @@ export default function HelpdeskAI() {
           details: `Changed by ${techName} (${currentUserProfile?.role || "Staff"})`
         });
       } catch (_) {}
+
+      // Dispatch Outbound White-Label Ticket Update / Resolution Email
+      try {
+        if (newStatus === "RESOLVED") {
+          const resolvedMail = buildTicketEmail({ ...t, status: newStatus }, "ticket_resolved", `Issue marked resolved by ${techName}.`);
+          if (resolvedMail) await saveEmail(resolvedMail);
+        } else if (newStatus === "IN_PROGRESS") {
+          const updatedMail = buildTicketEmail({ ...t, status: newStatus }, "ticket_updated", `Work In Progress: Technician ${techName} is actively working on your ticket.`);
+          if (updatedMail) await saveEmail(updatedMail);
+        }
+      } catch (e) {
+        console.warn("Could not dispatch ticket status email:", e);
+      }
 
       showBanner(
         newStatus === "RESOLVED"
@@ -1357,7 +1503,7 @@ export default function HelpdeskAI() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans text-xs antialiased flex flex-col selection:bg-indigo-500 selection:text-white">
+    <div className={`min-h-screen ${theme === "light" ? "theme-light bg-slate-50 text-slate-900" : "theme-dark bg-slate-950 text-slate-100"} font-sans text-xs antialiased flex flex-col selection:bg-indigo-500 selection:text-white`}>
       {/* Proactive Disconnection & Outage Sensor */}
       <ProactiveBanner activeIncidents={incidents} onOpenTroubleshooting={() => setTab("virtual-it")} />
 
@@ -1429,6 +1575,20 @@ export default function HelpdeskAI() {
 
           {/* Notification Center & User Profile (Always pinned to the far right) */}
           <div className="flex items-center gap-2 shrink-0 ml-auto">
+            {/* Theme Toggle Button (Light / Dark) */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              title={theme === "light" ? "Switch to Dark Mode" : "Switch to Light Mode"}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all border border-transparent hover:border-slate-700"
+            >
+              {theme === "light" ? (
+                <Moon className="w-4 h-4 text-indigo-600" />
+              ) : (
+                <Sun className="w-4 h-4 text-amber-400" />
+              )}
+            </button>
+
             {/* Live Notification Bell */}
             <NotificationBell
               notifications={notifications}

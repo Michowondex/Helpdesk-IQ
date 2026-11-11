@@ -27,7 +27,7 @@ const FEATURES = [
   ['⚡', 'Incident Command Centre', 'Live severity tracking, a proactive alert banner, and auto-escalation emails to staff and IT managers the moment an SLA is breached.'],
   ['🖥️', 'Quick Assist Sessions', 'Launch and share a 6-digit Windows Quick Assist code right inside the ticket chat. Nothing extra to install.'],
   ['📡', 'Service Monitoring', 'Watch email, VPN, internet and internal tools in real time. Services going offline trigger incidents and email alerts automatically.'],
-  ['📚', 'Knowledge Base', '36 ready-made articles plus your own company guides. Enterprise teams can bulk-upload via JSON or CSV.'],
+  ['📚', 'Knowledge Base', 'Ready-made articles plus your own company guides. Enterprise teams can bulk-upload via JSON or CSV.'],
   ['👥', 'Team & User Management', 'Add technicians and staff in seconds with Admin, Technician and Staff roles, department assignment and password resets from the dashboard.'],
   ['💳', 'Payments & Refunds', 'Paystack checkout for individuals, one-click 100% refunds from the ticket, and business billing in NGN (Paystack) or USD (Stripe).'],
   ['🔐', 'Security & Audit', 'Full audit log with CSV export, XSS-safe inputs and database-level Row-Level Security so tenants can never see each other’s data.'],
@@ -48,7 +48,7 @@ const TOUR = [
 
 const STATS = [
   ['24/7', 'AI assistant & WhatsApp support'],
-  ['36', 'Built-in knowledge base articles'],
+  ['50+', 'Built-in knowledge base articles'],
   ['100%', 'Money-back for individuals'],
   ['30 days', 'Free trial, no card'],
 ]
