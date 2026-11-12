@@ -5,12 +5,13 @@ export default function IndividualCheckoutModal({
   user,
   userProfile,
   pendingContext,
-  selectedOption, // 'whatsapp' | 'call' | 'ticket'
+  selectedOption, // 'whatsapp' | 'call' | 'ticket' | 'quick_assist'
+  defaultTier = "REMOTE",
   orgPricing,
   onClose,
   onPaymentSuccess
 }) {
-  const [supportType, setSupportType] = useState("REMOTE"); // 'REMOTE' | 'PHYSICAL_VISIT'
+  const [supportType, setSupportType] = useState(defaultTier === "PHYSICAL_VISIT" ? "PHYSICAL_VISIT" : "REMOTE"); // 'REMOTE' | 'PHYSICAL_VISIT'
   const [paying, setPaying] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -159,11 +160,11 @@ export default function IndividualCheckoutModal({
             >
               <div className="flex items-center justify-between mb-1.5">
                 <Monitor className={`w-4 h-4 ${supportType === "REMOTE" ? "text-indigo-400" : "text-slate-500"}`} />
-                <span className="text-xs font-bold text-indigo-400">₦3,500</span>
+                <span className="text-xs font-bold text-indigo-400">₦{REMOTE_PRICE.toLocaleString()}</span>
               </div>
               <h4 className="text-xs font-bold text-slate-100">Remote IT Assist</h4>
               <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">
-                Screen share, WhatsApp &amp; hotline. Instant resolution.
+                Unlocks WhatsApp, Phone IT Hotline &amp; Quick Assist screen share.
               </p>
             </button>
 
@@ -178,11 +179,11 @@ export default function IndividualCheckoutModal({
             >
               <div className="flex items-center justify-between mb-1.5">
                 <MapPin className={`w-4 h-4 ${supportType === "PHYSICAL_VISIT" ? "text-indigo-400" : "text-slate-500"}`} />
-                <span className="text-xs font-bold text-emerald-400">From ₦10,000</span>
+                <span className="text-xs font-bold text-emerald-400">From ₦{BASE_PHYSICAL.toLocaleString()}</span>
               </div>
               <h4 className="text-xs font-bold text-slate-100">Physical Visit</h4>
               <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">
-                Technician dispatched to your home or office address.
+                On-site technician dispatched to your home or office address.
               </p>
             </button>
           </div>

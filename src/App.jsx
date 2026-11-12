@@ -2066,7 +2066,7 @@ export default function HelpdeskAI() {
             accountType={
               currentUserProfile?.account_type ||
               currentUser?.user_metadata?.account_type ||
-              "business"
+              (isIndividualAccount ? "individual" : (orgConfig?.workspace_mode === "COMMERCIAL" ? "individual" : "business"))
             }
             currentUser={currentUser}
             currentUserProfile={currentUserProfile}

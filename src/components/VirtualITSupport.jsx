@@ -46,7 +46,18 @@ export default function VirtualITSupport({
   const [showContactModal, setShowContactModal] = useState(false);
   const [voiceError, setVoiceError] = useState("");
   // Individual Paystack Checkout Modal state
-  const [checkoutModal, setCheckoutModal] = useState(null); // { option: 'whatsapp' | 'call' | 'ticket', context }
+  const [checkoutModal, setCheckoutModal] = useState(null); // { option: 'whatsapp' | 'call' | 'ticket' | 'quick_assist', context }
+
+  // Active Paid Session State (Service-Tier Gated: 'REMOTE' unlocks WhatsApp, Call IT & Quick Assist. 'PHYSICAL_VISIT' locks remote tools)
+  const sessionKey = `bizadesk_paid_session_${orgConfig?.id || "master"}_${currentUser?.email || "guest"}`;
+  const [activePaidSession, setActivePaidSession] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem(sessionKey);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
 
   const bottomRef = useRef(null);
   const recognizerRef = useRef(null);
@@ -147,28 +158,95 @@ export default function VirtualITSupport({
     setMessages(prev => [...prev, assistantMsg]);
   };
 
-  // Handles the 3 escalation options (Ticket Only, WhatsApp, Direct Call)
-  // For Individual users / Paid Portals: Opens Paystack checkout first unless Enterprise Mode!
+  // Handles the 3 escalation options (Ticket Only, WhatsApp, Direct Call, Quick Assist)
+  // Strict Service Tier Gate:
+  // - Enterprise: Free internal support
+  // - Paid Session Active with 'REMOTE' tier: Unlocks WhatsApp, Call IT, and Quick Assist for the duration of the session!
+  // - Paid Session with 'PHYSICAL_VISIT' tier: Only Physical On-Site Visit dispatch is active; remote tools remain locked.
+  // - Unpaid: Opens IndividualCheckoutModal with pricing and conditions.
   const handleSelectThreeWayOption = async (optionType, context) => {
-    // Enterprise IT mode (Banks, Corporates) is strictly 100% free internal support
     const isEnterprise = orgConfig?.workspace_mode === "ENTERPRISE";
 
-    if (!isEnterprise && accountType === "individual") {
-      setCheckoutModal({ option: optionType, context });
+    // 1. Enterprise internal IT is strictly free
+    if (isEnterprise) {
+      if (optionType === "quick_assist") {
+        setShowRemoteModal(true);
+        return;
+      }
+      if (optionType === "call") {
+        setShowContactModal(true);
+        return;
+      }
+      await processTicketDispatch(optionType, context, {
+        paymentStatus: "FREE",
+        paymentAmount: 0,
+        supportType: "REMOTE"
+      });
       return;
     }
 
-    // Enterprise / internal corporate users continue free of charge
-    await processTicketDispatch(optionType, context, {
-      paymentStatus: "FREE",
-      paymentAmount: 0,
-      supportType: "REMOTE"
-    });
+    // 2. Individual or Commercial Portal client: Check active session tier
+    if (activePaidSession) {
+      // If user paid for REMOTE, ALL 3 remote channels (WhatsApp, Call IT, Quick Assist) are UNLOCKED!
+      if (activePaidSession.tier === "REMOTE") {
+        if (optionType === "quick_assist") {
+          setShowRemoteModal(true);
+          return;
+        }
+
+        const hotline = orgConfig?.support_phone || "+2349162029201";
+        const cleanHotline = hotline.replace(/\s+/g, "");
+        const rawWa = (orgConfig?.support_whatsapp || "2349162029201").replace(/\D/g, "");
+
+        if (optionType === "whatsapp") {
+          const waMsg = encodeURIComponent(
+            `🎫 *BizaDesk Support (Active Ticket: ${activePaidSession.ticketId || "TKT-ACTIVE"})*\n\n` +
+            `*Issue:* ${context?.summary || context?.title || "IT Assistance"}\n` +
+            `*Service:* Remote IT Assist (Paid Session)\n` +
+            `*Payment Ref:* ${activePaidSession.reference || "N/A"}\n\n` +
+            `Connecting to support team.`
+          );
+          window.open(`https://wa.me/${rawWa}?text=${waMsg}`, "_blank");
+          return;
+        }
+
+        if (optionType === "call") {
+          window.open(`tel:${cleanHotline}`, "_self");
+          return;
+        }
+
+        // Direct ticket dispatch under active remote session
+        await processTicketDispatch(optionType, context, {
+          paymentStatus: "PAID",
+          paymentAmount: activePaidSession.amount || 0,
+          reference: activePaidSession.reference,
+          supportType: "REMOTE"
+        });
+        return;
+      }
+
+      // If user paid for PHYSICAL_VISIT only: Remote channels remain locked!
+      if (activePaidSession.tier === "PHYSICAL_VISIT") {
+        setMessages(prev => [
+          ...prev,
+          {
+            role: "assistant",
+            content: `🔒 **Remote IT Channels Locked**: You currently have an active **Physical On-Site Visit** dispatch scheduled (Ticket **${activePaidSession.ticketId || "Pending"}**). Remote screen assist and priority WhatsApp support require a Remote IT Assist session.`
+          }
+        ]);
+        // Offer to initiate a Remote Assist session if needed
+        setCheckoutModal({ option: optionType, context, defaultTier: "REMOTE" });
+        return;
+      }
+    }
+
+    // 3. No active paid session: Open Checkout Modal with transparent pricing and conditions
+    setCheckoutModal({ option: optionType, context });
   };
 
-  // Called after payment is verified (for individual) or directly (for business)
+  // Called after payment is verified (for individual/commercial) or directly (for enterprise)
   const processTicketDispatch = async (optionType, context, paymentInfo = {}) => {
-    const issueTitle = context?.title || "IT Assistance Request via Virtual IT";
+    const issueTitle = context?.summary || context?.title || "IT Assistance Request via Virtual IT";
     const categoryTag = context?.category || "General IT";
     const priorityTag = context?.priority || "HIGH";
     const stepsLog = context?.steps?.length
@@ -186,7 +264,7 @@ export default function VirtualITSupport({
             ? `\n\n🚗 PHYSICAL VISIT DISPATCH:\nAddress: ${paymentInfo.address}\nCity: ${paymentInfo.city}\nSchedule: ${paymentInfo.visitSchedule}\nContact: ${paymentInfo.contactPhone}`
             : ""
         }`,
-        submitter: currentUserProfile?.full_name || currentUser?.email || "Staff User",
+        submitter: currentUserProfile?.full_name || currentUser?.email || "Customer",
         payment_status: paymentInfo.paymentStatus || "FREE",
         payment_amount: paymentInfo.paymentAmount || 0,
         paystack_ref: paymentInfo.reference || null,
@@ -196,36 +274,84 @@ export default function VirtualITSupport({
       });
     }
 
-    const ticketId = createdTicket?.id || "TKT-LOGGED";
+    const ticketId = createdTicket?.id || "TKT-101";
 
+    // If paid session, persist active session state with service tier
+    if (paymentInfo.paymentStatus === "PAID") {
+      const newSession = {
+        tier: paymentInfo.supportType === "PHYSICAL_VISIT" ? "PHYSICAL_VISIT" : "REMOTE",
+        ticketId,
+        reference: paymentInfo.reference,
+        amount: paymentInfo.paymentAmount,
+        dispatchDetails: paymentInfo.supportType === "PHYSICAL_VISIT" ? {
+          address: paymentInfo.address,
+          city: paymentInfo.city,
+          visitSchedule: paymentInfo.visitSchedule,
+          contactPhone: paymentInfo.contactPhone
+        } : null,
+        timestamp: Date.now()
+      };
+      setActivePaidSession(newSession);
+      try {
+        sessionStorage.setItem(sessionKey, JSON.stringify(newSession));
+      } catch (err) {
+        console.warn("Could not save session:", err);
+      }
+    }
+
+    const hotline = orgConfig?.support_phone || "+2349162029201";
+    const cleanHotline = hotline.replace(/\s+/g, "");
+    const rawWa = (orgConfig?.support_whatsapp || "2349162029201").replace(/\D/g, "");
+
+    if (paymentInfo.supportType === "PHYSICAL_VISIT") {
+      setMessages(prev => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `✅ **Physical On-Site Visit Confirmed!**\n\nTicket **${ticketId}** logged with our dispatch team. An IT Field Technician has been scheduled for **${paymentInfo.city}** (${paymentInfo.address}).\n\n📅 **Scheduled Window:** ${paymentInfo.visitSchedule || "Standard Next-Day"}\n📞 **Technician Contact Hotline:** ${hotline}\n\n*Note: Physical visit covers on-site resolution. Remote screen assist remains locked under this tier.*`
+        }
+      ]);
+      return;
+    }
+
+    // Remote IT Assist Tier Unlocked
     if (optionType === "whatsapp") {
       const waMessage = encodeURIComponent(
         `🎫 *BizaDesk Support Ticket: ${ticketId}*\n\n` +
         `*Issue:* ${issueTitle}\n` +
         `*Category:* ${categoryTag}\n` +
         `*Priority:* ${priorityTag}\n` +
-        `*Service:* ${paymentInfo.supportType === "PHYSICAL_VISIT" ? "Physical On-Site Visit" : "Remote IT Assist"}\n` +
+        `*Service:* Remote IT Assist (Paid Session)\n` +
         `*Payment Ref:* ${paymentInfo.reference || "N/A"}\n\n` +
         `*Context / Pre-steps attempted:*\n${stepsLog}\n\n` +
         `I have completed payment and need immediate assistance from an IT technician.`
       );
-      window.open(`https://wa.me/2349162029201?text=${waMessage}`, "_blank");
+      window.open(`https://wa.me/${rawWa}?text=${waMessage}`, "_blank");
 
       setMessages(prev => [
         ...prev,
         {
           role: "assistant",
-          content: `✅ Payment verified & Ticket **${ticketId}** logged into your support queue. Opening WhatsApp chat with our technical support team now...`
+          content: `✅ Payment verified & Ticket **${ticketId}** logged into your support queue. Opening WhatsApp chat with our technical support team now...\n\n🎉 **All Remote Channels Unlocked**: You can now also use **Call IT** (${hotline}) and **Quick Assist** screen share freely during this session without paying again!`
         }
       ]);
     } else if (optionType === "call") {
-      window.open("tel:+2349162029201", "_self");
+      window.open(`tel:${cleanHotline}`, "_self");
 
       setMessages(prev => [
         ...prev,
         {
           role: "assistant",
-          content: `✅ Payment verified & Ticket **${ticketId}** logged into your support queue. Connecting call to our IT Hotline (+234 916 202 9201)...`
+          content: `✅ Payment verified & Ticket **${ticketId}** logged into your support queue. Connecting call to our IT Hotline (${hotline})...\n\n🎉 **All Remote Channels Unlocked**: You can now also use **WhatsApp** and **Quick Assist** screen share freely during this session without paying again!`
+        }
+      ]);
+    } else if (optionType === "quick_assist") {
+      setShowRemoteModal(true);
+      setMessages(prev => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `✅ Payment verified & Ticket **${ticketId}** logged into your support queue. Launching Quick Assist remote screen share...\n\n🎉 **All Remote Channels Unlocked**: You can now also use **WhatsApp** and **Call IT** freely during this session without paying again!`
         }
       ]);
     } else {
@@ -358,8 +484,8 @@ export default function VirtualITSupport({
                 // Enterprise internal staff: free immediate remote session
                 setShowRemoteModal(true);
               } else {
-                // Commercial client / Individual: Gated by Paystack checkout
-                handleSelectThreeWayOption("call", { summary: "Remote Screen Diagnostics & Quick Assist" });
+                // Commercial client / Individual: Gated by Paystack checkout (or unlocked via active REMOTE session)
+                handleSelectThreeWayOption("quick_assist", { summary: "Remote Screen Diagnostics & Quick Assist" });
               }
             }}
             className="hidden sm:flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1.5 rounded-lg border border-slate-700 transition-colors"
