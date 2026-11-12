@@ -1678,6 +1678,11 @@ export default function HelpdeskAI() {
     currentUserProfile?.account_type === "individual" ||
     currentUser?.user_metadata?.account_type === "individual";
 
+  const userDomain = currentUser?.email && currentUser.email.includes("@")
+    ? currentUser.email.split("@")[1].toLowerCase()
+    : "";
+  const isMasterOwner = userDomain === PLATFORM_MASTER_DOMAIN;
+
   const allNavItems = [
     { id: "virtual-it", label: "Virtual IT Support", icon: Bot, roles: ["admin", "technician", "user"] },
     { id: "incidents", label: `Incidents ${activeInc.length ? `(${activeInc.length})` : ""}`, icon: Flame, roles: ["admin", "technician"] },
