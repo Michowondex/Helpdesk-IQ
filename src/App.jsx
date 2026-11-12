@@ -475,17 +475,39 @@ export default function HelpdeskAI() {
     try {
       const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
       if (data) {
-        // If this user signed up with the platform master domain, ensure they belong to master org and have admin role
         const userDomain = user.email && user.email.includes("@") ? user.email.split("@")[1].toLowerCase() : "";
         const isMasterOwner = userDomain === PLATFORM_MASTER_DOMAIN;
+        const isIndividual = 
+          data.account_type === "individual" || 
+          user.user_metadata?.account_type === "individual";
+        const hasCompany = Boolean(user.user_metadata?.company_name);
 
-        if (isMasterOwner && data.role !== "admin") {
+        // 1. Existing Platform Owner Healing: Ensure bound to Master Org as admin
+        if (isMasterOwner) {
           const { data: masterOrg } = await supabase.from("organizations").select("id").eq("is_master_org", true).maybeSingle();
-          if (masterOrg?.id) {
-            await supabase.from("profiles").update({ org_id: masterOrg.id, role: "admin", account_type: "business" }).eq("id", user.id);
+          if (masterOrg?.id && (data.org_id !== masterOrg.id || data.role !== "admin" || data.account_type !== "business")) {
+            await supabase.from("profiles").update({ 
+              org_id: masterOrg.id, 
+              role: "admin", 
+              account_type: "business" 
+            }).eq("id", user.id);
             data.org_id = masterOrg.id;
             data.role = "admin";
             data.account_type = "business";
+          }
+        } 
+        // 2. Existing Public Individual Healing: Ensure bound to Master Org as user
+        else if (isIndividual && !hasCompany) {
+          const mOrgId = masterOrgId || await resolveMasterOrgId();
+          if (mOrgId && (data.org_id !== mOrgId || data.role !== "user" || data.account_type !== "individual")) {
+            await supabase.from("profiles").update({ 
+              org_id: mOrgId, 
+              role: "user", 
+              account_type: "individual" 
+            }).eq("id", user.id);
+            data.org_id = mOrgId;
+            data.role = "user";
+            data.account_type = "individual";
           }
         }
 
