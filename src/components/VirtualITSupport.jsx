@@ -350,58 +350,53 @@ export default function VirtualITSupport({
             {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
           </button>
 
-          {/* Remote Assist Button (Only shown to regular users in Virtual IT) */}
-          {userRole === "user" && (
+          {/* Remote Assist Button (Shown to all users in Virtual IT) */}
+          <button
+            onClick={() => {
+              if (orgConfig?.workspace_mode === "ENTERPRISE") {
+                // Enterprise internal staff: free immediate remote session
+                setShowRemoteModal(true);
+              } else {
+                // Commercial client / Individual: Gated by Paystack checkout
+                handleSelectThreeWayOption("call", { summary: "Remote Screen Diagnostics & Quick Assist" });
+              }
+            }}
+            className="hidden sm:flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1.5 rounded-lg border border-slate-700 transition-colors"
+          >
+            <Monitor className="w-3.5 h-3.5 text-indigo-400" />
+            Quick Assist
+          </button>
+
+          {/* WhatsApp Button: Shown on Commercial workspaces and Individual accounts. NOT on Enterprise internal workspaces */}
+          {orgConfig?.workspace_mode !== "ENTERPRISE" && (
             <button
               onClick={() => {
-                if (accountType === "individual" && orgConfig?.workspace_mode !== "ENTERPRISE") {
-                  handleSelectThreeWayOption("call", { summary: "Remote Screen Diagnostics & Quick Assist" });
-                } else {
-                  setShowRemoteModal(true);
-                }
+                // Commercial or Individual support: opens Paystack checkout modal before connecting
+                handleSelectThreeWayOption("whatsapp", { summary: "WhatsApp Priority IT Assistance" });
               }}
-              className="hidden sm:flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1.5 rounded-lg border border-slate-700 transition-colors"
+              className="flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 text-white font-medium text-xs px-3 py-1.5 rounded-lg transition-all shadow-md shadow-emerald-950 border border-emerald-600"
             >
-              <Monitor className="w-3.5 h-3.5 text-indigo-400" />
-              Quick Assist
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">WhatsApp</span>
             </button>
           )}
 
-          {/* Contact IT / WhatsApp Buttons (Shown ONLY to regular staff users, not to IT technicians) */}
-          {userRole === "user" && (
-            <>
-              {/* WhatsApp button: ONLY for Individual users (routes to platform owner). Removed entirely for business users. */}
-              {accountType === "individual" && (
-                <button
-                  onClick={() => {
-                    if (orgConfig?.workspace_mode !== "ENTERPRISE") {
-                      handleSelectThreeWayOption("whatsapp", { summary: "WhatsApp Priority IT Assistance" });
-                    } else {
-                      const waNum = (orgConfig.support_whatsapp || "+2349162029201").replace(/\D/g, "");
-                      window.open(`https://wa.me/${waNum}?text=Hello%20BizaDesk%20Support%2C%20I%20need%20IT%20assistance.`, "_blank");
-                    }
-                  }}
-                  className="flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 text-white font-medium text-xs px-3 py-1.5 rounded-lg transition-all shadow-md shadow-emerald-950 border border-emerald-600"
-                >
-                  <MessageCircle className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">WhatsApp</span>
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  if (accountType === "individual" && orgConfig?.workspace_mode !== "ENTERPRISE") {
-                    handleSelectThreeWayOption("call", { summary: "Direct Phone Call IT Support" });
-                  } else {
-                    setShowContactModal(true);
-                  }
-                }}
-                className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs px-3 py-1.5 rounded-lg transition-all border border-slate-700"
-              >
-                <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                Call IT
-              </button>
-            </>
-          )}
+          {/* Call IT Button */}
+          <button
+            onClick={() => {
+              if (orgConfig?.workspace_mode === "ENTERPRISE") {
+                // Enterprise internal staff: opens internal IT contact modal (Phone, Helpdesk Email, and Teams/Slack link)
+                setShowContactModal(true);
+              } else {
+                // Commercial client / Individual: Gated by Paystack checkout
+                handleSelectThreeWayOption("call", { summary: "Direct Phone Call IT Support" });
+              }
+            }}
+            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs px-3 py-1.5 rounded-lg transition-all border border-slate-700"
+          >
+            <Phone className="w-3.5 h-3.5 text-emerald-400" />
+            Call IT
+          </button>
         </div>
       </div>
 

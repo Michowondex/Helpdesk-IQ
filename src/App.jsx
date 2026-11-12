@@ -1802,15 +1802,16 @@ export default function HelpdeskAI() {
 
   // ── 30-Day Free Trial & Subscription Enforcement ───────────────────
   const isBusinessAccount = !isIndividualAccount;
+  const isPlatformOwner = isMasterOwner || orgConfig?.is_master_org;
   const trialEndTs = subscription?.trial_end
     ? new Date(subscription.trial_end).getTime()
     : Date.now() + 30 * 86400000;
   const now = Date.now();
   const daysRemaining = Math.ceil((trialEndTs - now) / 86400000);
-  const isSubscriptionActive = subscription?.status === "ACTIVE" || subscription?.status === "PAID";
+  const isSubscriptionActive = isPlatformOwner || subscription?.status === "ACTIVE" || subscription?.status === "PAID";
   
-  // Trial expired if business account, not active and days remaining <= 0
-  const isTrialExpired = isBusinessAccount && !isSubscriptionActive && daysRemaining <= 0;
+  // Trial expired if business account, not platform owner, not active and days remaining <= 0
+  const isTrialExpired = !isPlatformOwner && isBusinessAccount && !isSubscriptionActive && daysRemaining <= 0;
   // Grace period: days 0, -1, -2, -3 (up to 3 days after expiry)
   const isGracePeriod = isTrialExpired && daysRemaining >= -3;
   // Hard locked: 4+ days past expiry
@@ -1898,18 +1899,22 @@ export default function HelpdeskAI() {
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
                     Personal IT
                   </span>
-                ) : orgConfig?.is_master_org ? (
+                ) : (isMasterOwner || orgConfig?.is_master_org) ? (
                   <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
                     Platform Owner
                   </span>
+                ) : orgConfig?.workspace_mode === "COMMERCIAL" ? (
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
+                    Commercial
+                  </span>
                 ) : (
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
-                    {orgConfig?.workspace_mode === "COMMERCIAL" ? "IT Provider" : "Enterprise"}
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                    Enterprise
                   </span>
                 )}
               </div>
               {!isIndividualAccount && (
-                <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                <span className="text-[11px] text-slate-400 flex items-center gap-1 font-medium">
                   <Building2 className="w-3 h-3 text-slate-500" />
                   {orgConfig.name || "Primary Organization"}
                 </span>

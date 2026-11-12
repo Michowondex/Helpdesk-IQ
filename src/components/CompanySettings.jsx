@@ -381,7 +381,7 @@ export default function CompanySettings({
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* ── Option B: Platform Master Workspace Control Card (Only for Master Org / bizadoc.com owner) ── */}
+        {/* ── Option B: Platform Master Workspace Control Card (ONLY for Master Org / bizadoc.com owner) ── */}
         {orgConfig?.is_master_org && (
           <div className="bg-gradient-to-br from-amber-950/30 via-slate-900 to-indigo-950/20 border-2 border-amber-500/40 rounded-2xl p-6 shadow-xl space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-amber-500/20">
@@ -535,8 +535,8 @@ export default function CompanySettings({
           </div>
         )}
 
-        {/* Workspace Operating Model Card */}
-        {orgConfig?.workspace_mode === "ENTERPRISE" ? (
+        {/* ── Internal Enterprise IT Mode: Strictly for Enterprise Organizations ── */}
+        {orgConfig?.workspace_mode === "ENTERPRISE" && (
           <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-start gap-3 shadow-sm">
             <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
               <Building2 className="w-5 h-5" />
@@ -553,7 +553,10 @@ export default function CompanySettings({
               </p>
             </div>
           </div>
-        ) : (
+        )}
+
+        {/* ── Dedicated Client Support Portal & Client Service Pricing: Strictly for Non-Master Commercial MSPs ── */}
+        {orgConfig?.workspace_mode === "COMMERCIAL" && !orgConfig?.is_master_org && (
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
