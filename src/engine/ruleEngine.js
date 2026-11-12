@@ -30,7 +30,7 @@ export function formatArticleContent(text, orgConfig = {}) {
     .replace(/\{\{PING_TARGET\}\}/g, "8.8.8.8");
 }
 
-export function matchQuery(query, { incidents = [], services: _services = [], customArticles = [], orgConfig = {} }) {
+export function matchQuery(query, { incidents = [], services: _services = [], customArticles = [], orgConfig = {}, userRole = "user" }) {
   const qClean = normalize(query);
   const qWords = qClean.split(" ").filter(w => w.length > 1);
 
@@ -38,7 +38,7 @@ export function matchQuery(query, { incidents = [], services: _services = [], cu
     return { type: "empty", message: "Please enter or speak your issue." };
   }
 
-  // 1. Live Outage Queries
+  // 1. Live Outage Queries (Restricted to IT Admins and Technicians only)
   const outageKeywords = [
     "which issue is on", "what issue is on", "active issue", "active incident",
     "is system down", "system status", "any outage", "outage", "is network down",
@@ -48,6 +48,24 @@ export function matchQuery(query, { incidents = [], services: _services = [], cu
     (qWords.includes("issue") && (qWords.includes("active") || qWords.includes("on") || qWords.includes("current")));
 
   if (isOutageQuery) {
+    const isTechStaff = userRole === "admin" || userRole === "technician";
+    
+    // For end-users, individuals, and commercial clients: do not expose technical incident reports
+    if (!isTechStaff) {
+      return {
+        type: "general_support",
+        title: "Technical Support Assistance",
+        message: "Internal server diagnostics and incident command are managed directly by IT administrators.\n\nIf you are experiencing network disruptions, computer issues, or cannot access your tools, please follow the guided troubleshooting steps or connect with a support technician below.",
+        suggestions: [
+          "No internet connection",
+          "Wi-Fi slow or dropping",
+          "Printer offline or not printing",
+          "Computer slow or frozen",
+          "Email not syncing / Outlook error"
+        ]
+      };
+    }
+
     const active = incidents.filter(i => !i.resolved);
     if (active.length === 0) {
       return {
@@ -144,12 +162,11 @@ export function matchQuery(query, { incidents = [], services: _services = [], cu
     title: "Need more details",
     message: "I couldn't find an exact troubleshooting guide for that phrase. Please choose a common topic below or connect with human IT support directly.",
     suggestions: [
-      "Which issue is active?",
       "No internet connection",
       "Wi-Fi slow or dropping",
       "Printer offline or not printing",
-      "Cisco VPN won't connect",
-      "Forgotten password / account locked",
+      "Audio or microphone not working",
+      "Email not syncing / Outlook error",
       "Computer slow or frozen",
       "Request remote assistance"
     ]

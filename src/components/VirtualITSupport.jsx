@@ -28,12 +28,12 @@ export default function VirtualITSupport({
       type: "welcome",
       content: "Hello! I am your BizaDesk Virtual IT Assistant. How can I help you today?",
       suggestions: [
-        "Which issue is active?",
         "No internet connection",
         "Wi-Fi slow or dropping",
         "Printer offline / jammed",
-        "Cisco AnyConnect VPN error",
-        "Request remote screen assistance"
+        "Audio or microphone not working",
+        "Email not syncing / Outlook error",
+        "Computer running very slow / frozen"
       ]
     }
   ]);
@@ -96,12 +96,13 @@ export default function VirtualITSupport({
     const newMsgs = [...messages, { role: "user", content: query }];
     setMessages(newMsgs);
 
-    // Run Rule Engine
+    // Run Rule Engine (passing userRole so technical outage queries are restricted to admins/technicians)
     const result = matchQuery(query, {
       incidents,
       services,
       customArticles,
-      orgConfig
+      orgConfig,
+      userRole
     });
 
     let assistantMsg = { role: "assistant", result };
@@ -572,7 +573,7 @@ export default function VirtualITSupport({
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && !e.shiftKey && handleSend()}
-            placeholder={isListening ? "Listening... Speak your issue..." : "Describe your problem or ask 'Which issue is on?'..."}
+            placeholder={isListening ? "Listening... Speak your issue..." : "Describe your computer, internet, or app issue..."}
             className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
           />
 
