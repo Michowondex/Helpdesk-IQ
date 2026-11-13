@@ -539,9 +539,30 @@ export default function HelpdeskAI() {
         // Multi-Tenant Provisioning: Create dedicated workspace for newly confirmed signup
         let targetOrgId = null;
         const userDomain = user.email && user.email.includes("@") ? user.email.split("@")[1].toLowerCase() : "company.com";
-        const companyName = user.user_metadata?.company_name;
-        const accountType = user.user_metadata?.account_type || (companyName ? "business" : "individual");
         const isMasterOwner = userDomain === PLATFORM_MASTER_DOMAIN;
+
+        // Consumer webmail domains are always individual public users
+        const isConsumer = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com", "aol.com"].includes(userDomain);
+
+        // Retrieve any pending OAuth choice selected on registration screen before Google redirect
+        let pendingOAuth = null;
+        try {
+          const rawPending = sessionStorage.getItem("bizadesk_pending_oauth");
+          if (rawPending) {
+            pendingOAuth = JSON.parse(rawPending);
+            sessionStorage.removeItem("bizadesk_pending_oauth");
+          }
+        } catch (_) {}
+
+        let companyName = user.user_metadata?.company_name || pendingOAuth?.companyName;
+        let accountType = user.user_metadata?.account_type || pendingOAuth?.accountType || (companyName ? "business" : "individual");
+        let workspaceMode = user.user_metadata?.workspace_mode || pendingOAuth?.workspaceMode || "ENTERPRISE";
+
+        // Consumer personal emails (e.g. @gmail.com) always link to Master Org as individual users
+        if (isConsumer && !isMasterOwner) {
+          accountType = "individual";
+          companyName = null;
+        }
 
         // If the user signed up as a public individual (no business / enterprise company name)
         // do NOT create an isolated empty org: link them directly to the Platform Master Workspace (bizadoc.com)
@@ -566,7 +587,7 @@ export default function HelpdeskAI() {
               incident_sla_minutes: 10,
               ticket_sla_hours: 1,
               enable_global_kb: accountType === "individual" ? true : false,
-              workspace_mode: user.user_metadata?.workspace_mode || (accountType === "business" ? "ENTERPRISE" : "COMMERCIAL"),
+              workspace_mode: workspaceMode,
               portal_slug: rawSlug,
               remote_fee: 3500,
               physical_visit_fee: 10000,

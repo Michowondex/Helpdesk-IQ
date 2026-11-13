@@ -77,6 +77,21 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
     setDuplicateBlockMsg("");
     setLoading(true);
     try {
+      // Preserve user-selected registration choices (Enterprise vs Commercial) across Google OAuth redirect
+      if (isSignUp) {
+        try {
+          sessionStorage.setItem("bizadesk_pending_oauth", JSON.stringify({
+            accountType,
+            workspaceMode,
+            companyName: companyName.trim()
+          }));
+        } catch (_) {}
+      } else {
+        try {
+          sessionStorage.removeItem("bizadesk_pending_oauth");
+        } catch (_) {}
+      }
+
       const redirectUrl = import.meta.env.VITE_APP_URL || window.location.origin;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
