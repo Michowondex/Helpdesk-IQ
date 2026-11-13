@@ -42,17 +42,17 @@ export default function MfaEnrollModal({ isOpen, isMandatory = false, onClose, o
       if (data) {
         setFactorId(data.id);
         
-        // Supabase returns raw SVG string `<svg ...>...</svg>`. Convert to valid data URI for <img> tag
-        const rawSvg = data.totp?.qr_code || "";
-        let validDataUri = "";
-        if (rawSvg.startsWith("data:")) {
-          validDataUri = rawSvg;
-        } else if (rawSvg.startsWith("<svg")) {
-          validDataUri = `data:image/svg+xml;utf-8,${encodeURIComponent(rawSvg)}`;
-        } else {
-          validDataUri = rawSvg;
+        // Supabase returns raw SVG string `<svg ...>...</svg>`
+        let rawSvg = data.totp?.qr_code || "";
+        
+        // Ensure SVG has crisp edge rendering and responsive sizing for mobile camera sensors
+        if (rawSvg.includes("<svg")) {
+          // Normalize SVG style to prevent optical blurring and ensure high contrast
+          if (!rawSvg.includes("shape-rendering")) {
+            rawSvg = rawSvg.replace("<svg", '<svg style="shape-rendering: crispEdges; image-rendering: pixelated; width: 100%; height: 100%; display: block;"');
+          }
         }
-        setQrCodeSvg(validDataUri);
+        setQrCodeSvg(rawSvg);
         setSecretKey(data.totp?.secret || "");
       }
     } catch (err) {
@@ -176,13 +176,21 @@ export default function MfaEnrollModal({ isOpen, isMandatory = false, onClose, o
                   <span>Scan QR Code with your Authenticator App:</span>
                 </div>
 
-                <div className="flex justify-center p-3 bg-white rounded-xl shadow-inner max-w-[200px] mx-auto">
+                {/* High-contrast pure white container with ample quiet-zone for camera optical detection */}
+                <div className="flex justify-center items-center p-5 bg-white rounded-xl shadow-md max-w-[220px] mx-auto overflow-hidden">
                   {qrCodeSvg ? (
-                    <img 
-                      src={qrCodeSvg} 
-                      alt="Authenticator QR Code" 
-                      className="w-44 h-44 object-contain"
-                    />
+                    qrCodeSvg.startsWith("<svg") ? (
+                      <div 
+                        className="w-44 h-44 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
+                        dangerouslySetInnerHTML={{ __html: qrCodeSvg }}
+                      />
+                    ) : (
+                      <img 
+                        src={qrCodeSvg} 
+                        alt="Authenticator QR Code" 
+                        className="w-44 h-44 object-contain"
+                      />
+                    )
                   ) : (
                     <div className="w-44 h-44 flex items-center justify-center text-slate-400 text-xs">
                       QR Code Unavailable
