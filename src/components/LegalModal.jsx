@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, Shield, FileText, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Shield, FileText, CheckCircle2, X } from "lucide-react";
 
 export default function LegalModal({ initialTab = "privacy", isOpen, onClose }) {
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -7,59 +7,63 @@ export default function LegalModal({ initialTab = "privacy", isOpen, onClose }) 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-3xl w-full h-[88vh] max-h-[850px] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         
-        {/* Top Bar */}
-        <div className="px-6 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-              title="Close"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
+        {/* Top Bar (Pinned) */}
+        <div className="px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5">
             <div className="flex items-center gap-2">
               <span className="font-bold text-white text-sm">BizaDesk Legal Center</span>
-              <span className="text-[10px] text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20 font-mono">
+              <span className="text-[10px] text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20 font-mono hidden sm:inline-block">
                 desk.bizadoc.com
               </span>
             </div>
           </div>
 
-          {/* Tab Switcher */}
-          <div className="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800">
+          <div className="flex items-center gap-2">
+            {/* Tab Switcher */}
+            <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setActiveTab("privacy")}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md flex items-center gap-1.5 transition-all ${
+                  activeTab === "privacy"
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <Shield className="w-3.5 h-3.5" />
+                Privacy
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("terms")}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md flex items-center gap-1.5 transition-all ${
+                  activeTab === "terms"
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                Terms
+              </button>
+            </div>
+
+            {/* Quick Top Close Button */}
             <button
               type="button"
-              onClick={() => setActiveTab("privacy")}
-              className={`px-3 py-1 text-xs font-medium rounded-lg flex items-center gap-1.5 transition-all ${
-                activeTab === "privacy"
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+              title="Close Legal Center"
             >
-              <Shield className="w-3.5 h-3.5" />
-              Privacy Policy
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("terms")}
-              className={`px-3 py-1 text-xs font-medium rounded-lg flex items-center gap-1.5 transition-all ${
-                activeTab === "terms"
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              Terms of Service
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Scrollable Content Body */}
-        <div className="p-6 overflow-y-auto space-y-6 text-slate-300 text-xs leading-relaxed font-sans">
+        {/* Scrollable Content Body (Strictly bounded flex-1 min-h-0 with smooth touch scroll) */}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-6 space-y-6 text-slate-300 text-xs leading-relaxed font-sans scroll-smooth">
           {activeTab === "privacy" ? (
             <div className="space-y-5">
               <div>
@@ -226,3 +230,4 @@ export default function LegalModal({ initialTab = "privacy", isOpen, onClose }) 
     </div>
   );
 }
+
