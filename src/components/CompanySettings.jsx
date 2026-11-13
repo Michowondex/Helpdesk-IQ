@@ -53,6 +53,8 @@ export default function CompanySettings({
   const [showMfaEnroll, setShowMfaEnroll] = useState(false);
   const [mfaStatus, setMfaStatus] = useState("loading"); // 'enabled' | 'disabled' | 'loading'
   const [activeMfaFactor, setActiveMfaFactor] = useState(null);
+  const [disablingMfa, setDisablingMfa] = useState(false);
+  const [savingMfaPolicy, setSavingMfaPolicy] = useState(false);
 
   const checkMfaStatus = async () => {
     try {
@@ -75,13 +77,44 @@ export default function CompanySettings({
   }, []);
 
   const handleDisableMfa = async () => {
-    if (!activeMfaFactor) return;
     if (!window.confirm("Are you sure you want to remove your authenticator device? You will no longer be prompted for 2FA on login.")) return;
+    setDisablingMfa(true);
     try {
-      await supabase.auth.mfa.unenroll({ factorId: activeMfaFactor.id });
+      const { data } = await supabase.auth.mfa.listFactors();
+      const allTotp = data?.totp || [];
+      if (allTotp.length === 0 && activeMfaFactor?.id) {
+        await supabase.auth.mfa.unenroll({ factorId: activeMfaFactor.id });
+      } else {
+        for (const factor of allTotp) {
+          try {
+            await supabase.auth.mfa.unenroll({ factorId: factor.id });
+          } catch (factorErr) {
+            console.warn("Unenroll factor step:", factorErr);
+          }
+        }
+      }
+      setActiveMfaFactor(null);
+      setMfaStatus("disabled");
       await checkMfaStatus();
     } catch (err) {
       alert("Failed to unenroll 2FA: " + err.message);
+    } finally {
+      setDisablingMfa(false);
+    }
+  };
+
+  const handleToggleEnforceMfa = async () => {
+    const nextValue = !form.enforce_mfa;
+    setForm(prev => ({ ...prev, enforce_mfa: nextValue }));
+    setSavingMfaPolicy(true);
+    try {
+      if (onSaveConfig) {
+        await onSaveConfig({ ...form, enforce_mfa: nextValue });
+      }
+    } catch (err) {
+      console.warn("Could not auto-save MFA policy:", err);
+    } finally {
+      setSavingMfaPolicy(false);
     }
   };
 
@@ -812,10 +845,11 @@ export default function CompanySettings({
                   <button
                     type="button"
                     onClick={handleDisableMfa}
-                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-500/10 hover:border-rose-500/40 hover:text-rose-300 text-slate-300 text-xs font-medium border border-slate-700 transition-all flex items-center gap-1.5"
+                    disabled={disablingMfa}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-500/10 hover:border-rose-500/40 hover:text-rose-300 disabled:opacity-50 text-slate-300 text-xs font-medium border border-slate-700 transition-all flex items-center gap-1.5"
                   >
                     <Trash2 className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Reconfigure / Remove Authenticator</span>
+                    <span>{disablingMfa ? "Removing..." : "Reconfigure / Remove Authenticator"}</span>
                   </button>
                 ) : (
                   <button
@@ -843,10 +877,14 @@ export default function CompanySettings({
               </div>
 
               <div className="pt-2 flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-300">Enforce 2FA for All Members</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-slate-300">Enforce 2FA for All Members</span>
+                  {savingMfaPolicy && <span className="text-[10px] text-indigo-400 animate-pulse">Saving...</span>}
+                </div>
                 <button
                   type="button"
-                  onClick={() => setForm(prev => ({ ...prev, enforce_mfa: !prev.enforce_mfa }))}
+                  onClick={handleToggleEnforceMfa}
+                  disabled={savingMfaPolicy}
                   className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
                     form.enforce_mfa ? "bg-indigo-600" : "bg-slate-700"
                   }`}
