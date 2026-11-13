@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ShieldCheck, KeyRound, Copy, Check, AlertCircle, X, ArrowRight, Loader2, Smartphone } from "lucide-react";
+import { ShieldCheck, KeyRound, Copy, Check, AlertCircle, X, ArrowRight, Loader2, Smartphone, RefreshCw } from "lucide-react";
 import { supabase } from "../supabase";
 
 export default function MfaEnrollModal({ isOpen, isMandatory = false, onClose, onSuccess }) {
@@ -11,62 +11,68 @@ export default function MfaEnrollModal({ isOpen, isMandatory = false, onClose, o
   const [verifying, setVerifying] = useState(false);
   const [copied, setCopied] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [resetting, setResetting] = useState(false);
+
+  const startEnrollment = async () => {
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      // Step 1: Clean up ALL previous unverified or conflicting factors for this user
+      try {
+        const { data: factors } = await supabase.auth.mfa.listFactors();
+        const allTotp = factors?.totp || [];
+        for (const f of allTotp) {
+          // If factor is unverified or has the friendly name, unenroll to avoid duplicate conflict
+          if (f.status === "unverified" || f.friendly_name?.toLowerCase().includes("bizadesk")) {
+            await supabase.auth.mfa.unenroll({ factorId: f.id });
+          }
+        }
+      } catch (cleanErr) {
+        console.warn("MFA factors pre-cleanup notice:", cleanErr);
+      }
+
+      // Step 2: Enroll a fresh factor with a unique friendly name
+      const uniqueName = `BizaDesk Authenticator (${Date.now().toString(36)})`;
+      const { data, error } = await supabase.auth.mfa.enroll({
+        factorType: "totp",
+        friendlyName: uniqueName
+      });
+
+      if (error) throw error;
+      if (data) {
+        setFactorId(data.id);
+        
+        // Supabase returns raw SVG string `<svg ...>...</svg>`. Convert to valid data URI for <img> tag
+        const rawSvg = data.totp?.qr_code || "";
+        let validDataUri = "";
+        if (rawSvg.startsWith("data:")) {
+          validDataUri = rawSvg;
+        } else if (rawSvg.startsWith("<svg")) {
+          validDataUri = `data:image/svg+xml;utf-8,${encodeURIComponent(rawSvg)}`;
+        } else {
+          validDataUri = rawSvg;
+        }
+        setQrCodeSvg(validDataUri);
+        setSecretKey(data.totp?.secret || "");
+      }
+    } catch (err) {
+      setErrorMsg(err.message || "Failed to initialize authenticator enrollment.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) return;
-
-    let isMounted = true;
-    async function startEnrollment() {
-      setLoading(true);
-      setErrorMsg("");
-      try {
-        // Clean up any stale unverified TOTP factors first to prevent factor mismatch
-        try {
-          const { data: factors } = await supabase.auth.mfa.listFactors();
-          const unverified = (factors?.totp || []).filter(f => f.status === "unverified");
-          for (const f of unverified) {
-            await supabase.auth.mfa.unenroll({ factorId: f.id });
-          }
-        } catch (_) {
-          // Non-blocking cleanup
-        }
-
-        const { data, error } = await supabase.auth.mfa.enroll({
-          factorType: "totp",
-          friendlyName: "BizaDesk Authenticator"
-        });
-
-        if (error) throw error;
-        if (isMounted && data) {
-          setFactorId(data.id);
-          
-          // Supabase returns raw SVG string `<svg ...>...</svg>`. Convert to valid data URI for <img> tag
-          const rawSvg = data.totp?.qr_code || "";
-          let validDataUri = "";
-          if (rawSvg.startsWith("data:")) {
-            validDataUri = rawSvg;
-          } else if (rawSvg.startsWith("<svg")) {
-            validDataUri = `data:image/svg+xml;utf-8,${encodeURIComponent(rawSvg)}`;
-          } else {
-            validDataUri = rawSvg;
-          }
-          setQrCodeSvg(validDataUri);
-          setSecretKey(data.totp?.secret || "");
-        }
-      } catch (err) {
-        if (isMounted) {
-          setErrorMsg(err.message || "Failed to initialize authenticator enrollment.");
-        }
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    }
-
     startEnrollment();
-    return () => {
-      isMounted = false;
-    };
   }, [isOpen]);
+
+  const handleReset = async () => {
+    setResetting(true);
+    setVerificationCode("");
+    await startEnrollment();
+    setResetting(false);
+  };
 
   if (!isOpen) return null;
 
@@ -123,14 +129,26 @@ export default function MfaEnrollModal({ isOpen, isMandatory = false, onClose, o
               <span className="text-[10px] text-slate-400">Microsoft / Google Authenticator</span>
             </div>
           </div>
-          {!isMandatory && onClose && (
+          <div className="flex items-center gap-2">
             <button
-              onClick={onClose}
-              className="text-slate-400 hover:text-slate-200 transition-colors p-1"
+              type="button"
+              onClick={handleReset}
+              disabled={loading || resetting}
+              title="Reset and generate fresh QR Code"
+              className="text-xs text-slate-400 hover:text-indigo-400 flex items-center gap-1 transition-colors px-2 py-1 rounded-md bg-slate-800/60 border border-slate-700/60 disabled:opacity-40"
             >
-              <X className="w-5 h-5" />
+              <RefreshCw className={`w-3 h-3 ${resetting || loading ? "animate-spin" : ""}`} />
+              <span className="text-[10px]">Reset QR</span>
             </button>
-          )}
+            {!isMandatory && onClose && (
+              <button
+                onClick={onClose}
+                className="text-slate-400 hover:text-slate-200 transition-colors p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Body */}
