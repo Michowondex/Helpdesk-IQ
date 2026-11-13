@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../supabase";
 import MfaChallengeModal from "./MfaChallengeModal";
+import LegalModal from "./LegalModal";
 
 const IS_DEV_MODE = import.meta.env.DEV;
 
@@ -60,6 +61,7 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
   const [verificationPendingEmail, setVerificationPendingEmail] = useState("");
   const [infoMsg, setInfoMsg] = useState("");
   const [showSandboxPreview, setShowSandboxPreview] = useState(IS_DEV_MODE);
+  const [legalModalTab, setLegalModalTab] = useState(null); // 'privacy' | 'terms' | null
 
   // 2FA / MFA Challenge state
   const [showMfaChallenge, setShowMfaChallenge] = useState(false);
@@ -757,11 +759,37 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
         )}
 
         {/* Security Footer Notice */}
-        <div className="text-center mt-6 text-[11px] text-slate-500 flex items-center justify-center gap-1.5">
-          <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
-          <span>Protected with Supabase Row Level Security (RLS) & Verified Email Confirmation</span>
+        <div className="text-center mt-6 text-[11px] text-slate-500 flex flex-col items-center justify-center gap-1.5">
+          <div className="flex items-center justify-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+            <span>Protected with Supabase Row Level Security (RLS) & Verified Email Confirmation</span>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] text-slate-500 pt-1">
+            <button
+              type="button"
+              onClick={() => setLegalModalTab("privacy")}
+              className="hover:text-indigo-400 underline transition-colors"
+            >
+              Privacy Policy
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={() => setLegalModalTab("terms")}
+              className="hover:text-indigo-400 underline transition-colors"
+            >
+              Terms of Service
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Terms of Service & Privacy Policy Modal */}
+      <LegalModal
+        isOpen={Boolean(legalModalTab)}
+        initialTab={legalModalTab || "privacy"}
+        onClose={() => setLegalModalTab(null)}
+      />
 
       {/* MFA / 2FA Login Challenge Modal */}
       {showMfaChallenge && (

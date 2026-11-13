@@ -11,6 +11,7 @@ import VirtualITSupport from "./components/VirtualITSupport";
 import ProactiveBanner from "./components/ProactiveBanner";
 import AuthScreen from "./components/AuthScreen";
 import LandingPage from "./components/LandingPage";
+import LegalModal from "./components/LegalModal";
 import NotificationBell from "./components/NotificationBell";
 import LiveClock from "./components/LiveClock";
 import { playNotificationChime } from "./engine/soundEffects";
@@ -181,6 +182,16 @@ export default function HelpdeskAI() {
   });
   const [portalOrg, setPortalOrg] = useState(null);
   const [portalLoading, setPortalLoading] = useState(Boolean(portalSlug));
+
+  // ── Direct URL Links for Google OAuth & Public Compliance (?privacy=true or ?terms=true) ──
+  const [legalRoute, setLegalRoute] = useState(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const hash = window.location.hash || "";
+    if (params.get("privacy") === "true" || hash.includes("privacy")) return "privacy";
+    if (params.get("terms") === "true" || hash.includes("terms")) return "terms";
+    return null;
+  });
 
   // Resolve Portal Org if ?portal= is in URL
   useEffect(() => {
@@ -3080,6 +3091,13 @@ export default function HelpdeskAI() {
           />
         </Suspense>
       )}
+
+      {/* Direct Legal Policy Dialog (?privacy=true or ?terms=true) */}
+      <LegalModal
+        isOpen={Boolean(legalRoute)}
+        initialTab={legalRoute || "privacy"}
+        onClose={() => setLegalRoute(null)}
+      />
     </div>
   );
 }

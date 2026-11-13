@@ -10,6 +10,7 @@
  */
 import { useState } from 'react'
 import DemoRequestModal from './DemoRequestModal'
+import LegalModal from './LegalModal'
 import './landing.css'
 import { ChatVisual, TicketVisual, EscalationVisual, MonitorVisual } from './Visuals'
 import LandingChatbot from './LandingChatbot'
@@ -143,6 +144,7 @@ function PlanCard({ plan, yearly, onGoToApp }) {
 export default function LandingPage({ onGoToApp }) {
   const [yearly, setYearly] = useState(false)
   const [showDemoModal, setShowDemoModal] = useState(false)
+  const [legalModalTab, setLegalModalTab] = useState(null) // 'privacy' | 'terms' | null
 
   const handleCtaClick = (e) => {
     if (onGoToApp) {
@@ -360,6 +362,22 @@ export default function LandingPage({ onGoToApp }) {
           <div>
             <Logo style={{ color: 'var(--tx)', marginBottom: 10 }} />
             Autonomous IT Support &amp; Incident Command
+            <div style={{ marginTop: 12, display: 'flex', gap: 14, fontSize: 13 }}>
+              <button
+                type="button"
+                onClick={() => setLegalModalTab('privacy')}
+                style={{ background: 'none', border: 'none', padding: 0, color: 'var(--tx)', opacity: 0.75, cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                Privacy Policy
+              </button>
+              <button
+                type="button"
+                onClick={() => setLegalModalTab('terms')}
+                style={{ background: 'none', border: 'none', padding: 0, color: 'var(--tx)', opacity: 0.75, cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                Terms of Service
+              </button>
+            </div>
           </div>
           <div>
             Email: <a href="mailto:helpdesk@bizadoc.com">helpdesk@bizadoc.com</a><br />
@@ -376,6 +394,13 @@ export default function LandingPage({ onGoToApp }) {
       <DemoRequestModal
         isOpen={showDemoModal}
         onClose={() => setShowDemoModal(false)}
+      />
+
+      {/* Terms of Service & Privacy Policy Modal */}
+      <LegalModal
+        isOpen={Boolean(legalModalTab)}
+        initialTab={legalModalTab || 'privacy'}
+        onClose={() => setLegalModalTab(null)}
       />
     </div>
   )
