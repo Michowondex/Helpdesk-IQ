@@ -20,6 +20,17 @@ export default function MfaEnrollModal({ isOpen, isMandatory = false, onClose, o
       setLoading(true);
       setErrorMsg("");
       try {
+        // Clean up any stale unverified TOTP factors first to prevent factor mismatch
+        try {
+          const { data: factors } = await supabase.auth.mfa.listFactors();
+          const unverified = (factors?.totp || []).filter(f => f.status === "unverified");
+          for (const f of unverified) {
+            await supabase.auth.mfa.unenroll({ factorId: f.id });
+          }
+        } catch (_) {
+          // Non-blocking cleanup
+        }
+
         const { data, error } = await supabase.auth.mfa.enroll({
           factorType: "totp",
           friendlyName: "BizaDesk Authenticator"
@@ -28,8 +39,19 @@ export default function MfaEnrollModal({ isOpen, isMandatory = false, onClose, o
         if (error) throw error;
         if (isMounted && data) {
           setFactorId(data.id);
-          setQrCodeSvg(data.totp.qr_code);
-          setSecretKey(data.totp.secret);
+          
+          // Supabase returns raw SVG string `<svg ...>...</svg>`. Convert to valid data URI for <img> tag
+          const rawSvg = data.totp?.qr_code || "";
+          let validDataUri = "";
+          if (rawSvg.startsWith("data:")) {
+            validDataUri = rawSvg;
+          } else if (rawSvg.startsWith("<svg")) {
+            validDataUri = `data:image/svg+xml;utf-8,${encodeURIComponent(rawSvg)}`;
+          } else {
+            validDataUri = rawSvg;
+          }
+          setQrCodeSvg(validDataUri);
+          setSecretKey(data.totp?.secret || "");
         }
       } catch (err) {
         if (isMounted) {
