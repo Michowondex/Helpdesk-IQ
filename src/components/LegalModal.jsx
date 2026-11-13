@@ -8,10 +8,20 @@ export default function LegalModal({ initialTab = "privacy", isOpen, onClose }) 
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-3xl w-full h-[88vh] max-h-[850px] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div 
+        style={{
+          height: "85vh",
+          maxHeight: "800px",
+          display: "flex",
+          flexDirection: "column",
+          width: "100%",
+          maxWidth: "768px"
+        }}
+        className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+      >
         
         {/* Top Bar (Pinned) */}
-        <div className="px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between shrink-0">
+        <div style={{ flexShrink: 0 }} className="px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="flex items-center gap-2">
               <span className="font-bold text-white text-sm">BizaDesk Legal Center</span>
@@ -62,8 +72,16 @@ export default function LegalModal({ initialTab = "privacy", isOpen, onClose }) 
           </div>
         </div>
 
-        {/* Scrollable Content Body (Strictly bounded flex-1 min-h-0 with smooth touch scroll) */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-6 space-y-6 text-slate-300 text-xs leading-relaxed font-sans scroll-smooth">
+        {/* Scrollable Content Body (Strictly bounded with guaranteed native scrolling) */}
+        <div 
+          style={{
+            flex: "1 1 0%",
+            minHeight: 0,
+            overflowY: "auto",
+            WebkitOverflowScrolling: "touch"
+          }}
+          className="p-6 space-y-6 text-slate-300 text-xs leading-relaxed font-sans"
+        >
           {activeTab === "privacy" ? (
             <div className="space-y-5">
               <div>
@@ -212,8 +230,8 @@ export default function LegalModal({ initialTab = "privacy", isOpen, onClose }) 
           )}
         </div>
 
-        {/* Modal Footer */}
-        <div className="px-6 py-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between shrink-0">
+        {/* Modal Footer (Pinned) */}
+        <div style={{ flexShrink: 0 }} className="px-6 py-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between">
           <span className="text-[11px] text-slate-500">
             © {new Date().getFullYear()} BizAdoc Technologies. All rights reserved.
           </span>
