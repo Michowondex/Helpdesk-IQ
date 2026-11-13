@@ -240,7 +240,17 @@ export default function VirtualITSupport({
       }
     }
 
-    // 3. No active paid session: Open Checkout Modal with transparent pricing and conditions
+    // 3. FREE TICKET ESCALATION: "Create Ticket Only" is 100% Free for all users!
+    if (optionType === "ticket") {
+      await processTicketDispatch("ticket", context, {
+        paymentStatus: "FREE",
+        paymentAmount: 0,
+        supportType: "REMOTE"
+      });
+      return;
+    }
+
+    // 4. Live Channels (WhatsApp, Call IT, Quick Assist) require payment if not yet in paid session
     setCheckoutModal({ option: optionType, context });
   };
 
@@ -355,12 +365,15 @@ export default function VirtualITSupport({
         }
       ]);
     } else {
-      // Option: ticket only
+      // Option: ticket only (Free standard support queue or paid ticket)
+      const isPaid = paymentInfo.paymentStatus === "PAID";
       setMessages(prev => [
         ...prev,
         {
           role: "assistant",
-          content: `✅ Payment verified! Ticket **${ticketId}** has been raised with ${priorityTag} priority and assigned to our on-duty IT team. You can view progress anytime in the "My Tickets" tab.`
+          content: isPaid
+            ? `✅ Payment verified! Ticket **${ticketId}** has been raised with ${priorityTag} priority and assigned to our on-duty IT team. You can view progress anytime in the "My Tickets" tab.`
+            : `✅ Ticket **${ticketId}** logged into your support queue with **Standard Queue (Free)** priority. Our IT support team will review and attend to it. You can track progress anytime in the "My Tickets" tab.\n\n*Need immediate 1-on-1 assistance right now? Use WhatsApp, Call IT, or Quick Assist at the top.*`
         }
       ]);
     }
@@ -369,8 +382,10 @@ export default function VirtualITSupport({
   const handleEscalateToTicket = (article) => {
     setActiveStepArticle(null);
 
-    // If individual user, trigger the 3 escalation options with article context
-    if (accountType === "individual") {
+    const isEnterprise = orgConfig?.workspace_mode === "ENTERPRISE";
+
+    // Non-Enterprise (Public Individuals and Commercial Clients) always see the 3-Way Escalation Choice Card!
+    if (!isEnterprise) {
       setMessages(prev => [
         ...prev,
         {
@@ -383,7 +398,7 @@ export default function VirtualITSupport({
       return;
     }
 
-    // Business users default to standard ticket submission
+    // Enterprise users default to standard internal corporate ticket submission
     const ticketPayload = {
       title: article ? `Unresolved: ${article.title}` : "User requested IT Assistance via Virtual Support",
       ticket_type: article?.category === "Network" ? "Network Issue" : "Software Issue",
@@ -428,7 +443,8 @@ export default function VirtualITSupport({
     if (solved) {
       handleArticleResolved(article);
     } else {
-      if (accountType === "individual") {
+      const isEnterprise = orgConfig?.workspace_mode === "ENTERPRISE";
+      if (!isEnterprise) {
         setMessages(prev => [
           ...prev,
           {
@@ -618,32 +634,47 @@ export default function VirtualITSupport({
                       {/* 1. Chat on WhatsApp */}
                       <button
                         onClick={() => handleSelectThreeWayOption("whatsapp", m.context)}
-                        className="flex items-center justify-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold py-2.5 px-2 rounded-lg border border-emerald-600 shadow-md shadow-emerald-950 transition-colors"
+                        className="flex flex-col items-center justify-center gap-1 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold py-2.5 px-2 rounded-lg border border-emerald-600 shadow-md shadow-emerald-950 transition-colors"
                       >
-                        <MessageCircle className="w-3.5 h-3.5" />
-                        Chat on WhatsApp
+                        <div className="flex items-center gap-1.5">
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          <span>Chat on WhatsApp</span>
+                        </div>
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-200 bg-emerald-800/80 px-1.5 py-0.2 rounded">
+                          Live Assist
+                        </span>
                       </button>
 
                       {/* 2. Direct Call */}
                       <button
                         onClick={() => handleSelectThreeWayOption("call", m.context)}
-                        className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-semibold py-2.5 px-2 rounded-lg border border-slate-700 transition-colors"
+                        className="flex flex-col items-center justify-center gap-1 bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-semibold py-2.5 px-2 rounded-lg border border-slate-700 transition-colors"
                       >
-                        <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                        Direct Call IT
+                        <div className="flex items-center gap-1.5">
+                          <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Direct Call IT</span>
+                        </div>
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-300 bg-slate-900 px-1.5 py-0.2 rounded border border-emerald-500/30">
+                          Live Assist
+                        </span>
                       </button>
 
-                      {/* 3. Create Ticket Only */}
+                      {/* 3. Create Ticket Only (Free) */}
                       <button
                         onClick={() => handleSelectThreeWayOption("ticket", m.context)}
-                        className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-2.5 px-2 rounded-lg shadow-md shadow-indigo-950 transition-colors"
+                        className="flex flex-col items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-2.5 px-2 rounded-lg shadow-md shadow-indigo-950 transition-colors"
                       >
-                        <Ticket className="w-3.5 h-3.5" />
-                        Create Ticket Only
+                        <div className="flex items-center gap-1.5">
+                          <Ticket className="w-3.5 h-3.5" />
+                          <span>Create Ticket</span>
+                        </div>
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-indigo-100 bg-indigo-700/90 px-1.5 py-0.2 rounded border border-indigo-400/30">
+                          100% Free
+                        </span>
                       </button>
                     </div>
-                    <p className="text-[10px] text-slate-500 text-center">
-                      * All options automatically record a support ticket in your account for tracking.
+                    <p className="text-[10px] text-slate-400 text-center">
+                      💡 <strong>Create Ticket is 100% Free</strong>. WhatsApp &amp; Call IT connect to instant live human technicians.
                     </p>
                   </div>
                 )}
@@ -877,7 +908,20 @@ export default function VirtualITSupport({
           pendingContext={checkoutModal.context}
           selectedOption={checkoutModal.option}
           orgPricing={orgConfig}
-          onClose={() => setCheckoutModal(null)}
+          onClose={() => {
+            const context = checkoutModal.context;
+            setCheckoutModal(null);
+            // Friendly prompt offering free ticket submission if user cancels payment
+            setMessages(prev => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `💡 **Prefer not to pay for instant live dispatch?** No problem! You can always [Create a Free Support Ticket] and our IT team will attend to it in the standard queue.`,
+                type: "three_way_escalation",
+                context: context
+              }
+            ]);
+          }}
           onPaymentSuccess={(paymentInfo) => {
             const { option, context } = checkoutModal;
             setCheckoutModal(null);

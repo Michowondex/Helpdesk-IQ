@@ -4,7 +4,7 @@ import {
   Plus, CheckCircle2, RefreshCw, Trash2, Clock, ShieldAlert,
   ChevronRight, Building2, Flame, HelpCircle, LogOut, User, Users,
   Monitor, Cpu, Globe, Sparkles, MessageSquare, KeyRound, X, Eye, EyeOff,
-  Sun, Moon, Scale, ShieldCheck
+  Sun, Moon, Scale, ShieldCheck, MapPin, Phone
 } from "lucide-react";
 import { supabase } from "./supabase";
 import VirtualITSupport from "./components/VirtualITSupport";
@@ -2397,6 +2397,26 @@ export default function HelpdeskAI() {
                             <p className="text-xs text-slate-400 mt-2 bg-slate-950 p-2.5 rounded border border-slate-800/80 whitespace-pre-wrap">
                               {t.description}
                             </p>
+                          )}
+
+                          {/* Physical Visit Dispatch Details Highlight Card */}
+                          {(t.support_type === "PHYSICAL_VISIT" || t.visit_address) && (
+                            <div className="mt-2.5 p-3 rounded-xl bg-gradient-to-r from-emerald-950/40 to-slate-900 border border-emerald-500/30 text-xs space-y-1.5">
+                              <div className="flex items-center gap-2 font-bold text-emerald-400 text-[11px] uppercase tracking-wider">
+                                <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                <span>Physical On-Site Dispatch Destination</span>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-300">
+                                <div>
+                                  <span className="text-slate-500 block text-[10px]">Location / City:</span>
+                                  <strong className="text-white">{t.visit_city || "City Registered"}</strong>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 block text-[10px]">Street Address & Landmark:</span>
+                                  <span className="text-slate-200">{t.visit_address || "Provided in ticket description"}</span>
+                                </div>
+                              </div>
+                            </div>
                           )}
                           {/* Attached Pre-Diagnostic Context Card */}
                           {t.diagnostics && (
