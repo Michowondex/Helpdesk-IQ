@@ -231,7 +231,7 @@ export default function VirtualITSupport({
           ...prev,
           {
             role: "assistant",
-            content: `🔒 **Remote IT Channels Locked**: You currently have an active **Physical On-Site Visit** dispatch scheduled (Ticket **${activePaidSession.ticketId || "Pending"}**). Remote screen assist and priority WhatsApp support require a Remote IT Assist session.`
+            content: `🔒 Remote IT Channels Locked: You currently have an active Physical On-Site Visit dispatch scheduled (Ticket ${activePaidSession.ticketId || "Pending"}). Remote screen assist and priority WhatsApp support require a Remote IT Assist session.`
           }
         ]);
         // Offer to initiate a Remote Assist session if needed
@@ -318,7 +318,7 @@ export default function VirtualITSupport({
         ...prev,
         {
           role: "assistant",
-          content: `✅ **Physical On-Site Visit Confirmed!**\n\nTicket **${ticketId}** logged with our dispatch team. An IT Field Technician has been scheduled for **${paymentInfo.city}** (${paymentInfo.address}).\n\n📅 **Scheduled Window:** ${paymentInfo.visitSchedule || "Standard Next-Day"}\n📞 **Technician Contact Hotline:** ${hotline}\n\n*Note: Physical visit covers on-site resolution. Remote screen assist remains locked under this tier.*`
+          content: `✅ Physical On-Site Visit Confirmed!\n\nTicket ${ticketId} logged with our dispatch team. An IT Field Technician has been scheduled for ${paymentInfo.city} (${paymentInfo.address}).\n\n📅 Scheduled Window: ${paymentInfo.visitSchedule || "Standard Next-Day"}\n📞 Technician Contact Hotline: ${hotline}\n\nNote: Physical visit covers on-site resolution. Remote screen assist remains locked under this tier.`
         }
       ]);
       return;
@@ -342,7 +342,7 @@ export default function VirtualITSupport({
         ...prev,
         {
           role: "assistant",
-          content: `✅ Payment verified & Ticket **${ticketId}** logged into your support queue. Opening WhatsApp chat with our technical support team now...\n\n🎉 **All Remote Channels Unlocked**: You can now also use **Call IT** (${hotline}) and **Quick Assist** screen share freely during this session without paying again!`
+          content: `✅ Payment verified & Ticket ${ticketId} logged into your support queue. Opening WhatsApp chat with our technical support team now...\n\n🎉 All Remote Channels Unlocked: You can now also use Call IT (${hotline}) and Quick Assist screen share freely during this session without paying again!`
         }
       ]);
     } else if (optionType === "call") {
@@ -352,7 +352,7 @@ export default function VirtualITSupport({
         ...prev,
         {
           role: "assistant",
-          content: `✅ Payment verified & Ticket **${ticketId}** logged into your support queue. Connecting call to our IT Hotline (${hotline})...\n\n🎉 **All Remote Channels Unlocked**: You can now also use **WhatsApp** and **Quick Assist** screen share freely during this session without paying again!`
+          content: `✅ Payment verified & Ticket ${ticketId} logged into your support queue. Connecting call to our IT Hotline (${hotline})...\n\n🎉 All Remote Channels Unlocked: You can now also use WhatsApp and Quick Assist screen share freely during this session without paying again!`
         }
       ]);
     } else if (optionType === "quick_assist") {
@@ -361,7 +361,7 @@ export default function VirtualITSupport({
         ...prev,
         {
           role: "assistant",
-          content: `✅ Payment verified & Ticket **${ticketId}** logged into your support queue. Launching Quick Assist remote screen share...\n\n🎉 **All Remote Channels Unlocked**: You can now also use **WhatsApp** and **Call IT** freely during this session without paying again!`
+          content: `✅ Payment verified & Ticket ${ticketId} logged into your support queue. Launching Quick Assist remote screen share...\n\n🎉 All Remote Channels Unlocked: You can now also use WhatsApp and Call IT freely during this session without paying again!`
         }
       ]);
     } else {
@@ -372,8 +372,8 @@ export default function VirtualITSupport({
         {
           role: "assistant",
           content: isPaid
-            ? `✅ Payment verified! Ticket **${ticketId}** has been raised with ${priorityTag} priority and assigned to our on-duty IT team. You can view progress anytime in the "My Tickets" tab.`
-            : `✅ Ticket **${ticketId}** logged into your support queue with **Standard Queue (Free)** priority. Our IT support team will review and attend to it. You can track progress anytime in the "My Tickets" tab.\n\n*Need immediate 1-on-1 assistance right now? Use WhatsApp, Call IT, or Quick Assist at the top.*`
+            ? `✅ Payment verified! Ticket ${ticketId} has been raised with ${priorityTag} priority and assigned to our on-duty IT team. You can view progress anytime in the "My Tickets" tab.`
+            : `✅ Ticket ${ticketId} logged into your support queue with Standard Queue (Free) priority. Our IT support team will review and attend to it. You can track progress anytime in the "My Tickets" tab.\n\nNeed immediate 1-on-1 assistance right now? Use WhatsApp, Call IT, or Quick Assist at the top.`
         }
       ]);
     }
@@ -916,7 +916,7 @@ export default function VirtualITSupport({
               ...prev,
               {
                 role: "assistant",
-                content: `💡 **Prefer not to pay for instant live dispatch?** No problem! You can always [Create a Free Support Ticket] and our IT team will attend to it in the standard queue.`,
+                content: `💡 Prefer not to pay for instant live dispatch? No problem! You can always select Create Ticket below for free, and our IT team will attend to it in the standard queue.`,
                 type: "three_way_escalation",
                 context: context
               }
