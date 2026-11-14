@@ -320,10 +320,10 @@ export default function HelpdeskAI() {
   };
 
   // ── Resolve the Platform Master Workspace org ID (bizadoc.com) ──────────────
-  // Called once on individual-user login. Result is cached in masterOrgId state.
+  // Called once on login. Result is cached in masterOrgId state.
   const resolveMasterOrgId = async () => {
     if (masterOrgId) return masterOrgId;
-    const { data } = await supabase
+    let { data } = await supabase
       .from("organizations")
       .select("id")
       .eq("is_master_org", true)
@@ -332,6 +332,20 @@ export default function HelpdeskAI() {
     if (data?.id) {
       setMasterOrgId(data.id);
       return data.id;
+    }
+    // Fallback: match by domain or support email or name
+    const { data: fallback } = await supabase
+      .from("organizations")
+      .select("id")
+      .or("domain.eq.bizadoc.com,support_email.ilike.%bizadoc.com%,name.ilike.%bizadoc%")
+      .limit(1)
+      .maybeSingle();
+    if (fallback?.id) {
+      setMasterOrgId(fallback.id);
+      try {
+        await supabase.from("organizations").update({ is_master_org: true }).eq("id", fallback.id);
+      } catch (_) {}
+      return fallback.id;
     }
     return null;
   };
@@ -357,7 +371,9 @@ export default function HelpdeskAI() {
       // Security: Strip sensitive secrets if current user is not an admin
       if (orgData) {
         const sanitizedOrg = { ...orgData };
-        if (currentUserProfile && currentUserProfile.role !== "admin") {
+        const isMaster = currentUser?.email?.toLowerCase().endsWith("@" + PLATFORM_MASTER_DOMAIN);
+        const isAdminUser = isMaster || (currentUserProfile && currentUserProfile.role === "admin");
+        if (!isAdminUser) {
           delete sanitizedOrg.resend_api_key;
           delete sanitizedOrg.smtp_pass;
         }
@@ -424,9 +440,12 @@ export default function HelpdeskAI() {
       // For individual users: also fetch global KB articles from the Master Org (bizadoc.com)
       // so they benefit from all published help articles without being part of that workspace.
       let allArticles = kb || [];
+      const isMasterUser = currentUser?.email?.toLowerCase().endsWith("@" + PLATFORM_MASTER_DOMAIN);
       const isIndividual = 
-        currentUserProfile?.account_type === "individual" ||
-        currentUser?.user_metadata?.account_type === "individual";
+        !isMasterUser && (
+          currentUserProfile?.account_type === "individual" ||
+          currentUser?.user_metadata?.account_type === "individual"
+        );
       if (isIndividual) {
         const mOrgId = masterOrgId || await resolveMasterOrgId();
         if (mOrgId && mOrgId !== activeOrgId) {
@@ -450,7 +469,7 @@ export default function HelpdeskAI() {
         // Admin: sees all org notifications
         // Technician: sees notifications assigned to them or their team or system alerts
         // User: sees notifications for tickets they created or general system alerts
-        const userRoleLocal = currentUserProfile?.role || "user";
+        const userRoleLocal = isMasterUser ? "admin" : (currentUserProfile?.role || "user");
         const filteredNotifs = notifsData.filter(n => {
           if (userRoleLocal === "admin") return true;
           if (userRoleLocal === "technician") {
@@ -505,27 +524,32 @@ export default function HelpdeskAI() {
         const userDomain = user.email && user.email.includes("@") ? user.email.split("@")[1].toLowerCase() : "";
         const isMasterOwner = userDomain === PLATFORM_MASTER_DOMAIN;
         const isIndividual = 
-          data.account_type === "individual" || 
-          user.user_metadata?.account_type === "individual";
+          !isMasterOwner && (
+            data.account_type === "individual" || 
+            user.user_metadata?.account_type === "individual"
+          );
         const hasCompany = Boolean(user.user_metadata?.company_name);
 
         // 1. Existing Platform Owner Healing: Ensure bound to Master Org as admin & KB permanently active
         if (isMasterOwner) {
-          const { data: masterOrg } = await supabase.from("organizations").select("id, enable_global_kb").eq("is_master_org", true).maybeSingle();
-          if (masterOrg?.id) {
-            if (!masterOrg.enable_global_kb) {
-              await supabase.from("organizations").update({ enable_global_kb: true }).eq("id", masterOrg.id);
-            }
-            if (data.org_id !== masterOrg.id || data.role !== "admin" || data.account_type !== "business") {
-              await supabase.from("profiles").update({ 
-                org_id: masterOrg.id, 
-                role: "admin", 
-                account_type: "business" 
-              }).eq("id", user.id);
-              data.org_id = masterOrg.id;
-              data.role = "admin";
-              data.account_type = "business";
-            }
+          const mOrgId = masterOrgId || await resolveMasterOrgId();
+          if (mOrgId) {
+            await supabase.from("organizations").update({ enable_global_kb: true, is_master_org: true }).eq("id", mOrgId);
+          }
+          const targetOrg = mOrgId || data.org_id;
+          if (targetOrg) {
+            await supabase.from("organizations").update({ enable_global_kb: true, is_master_org: true }).eq("id", targetOrg);
+          }
+
+          if (data.org_id !== targetOrg || data.role !== "admin" || data.account_type !== "business") {
+            await supabase.from("profiles").update({ 
+              ...(targetOrg ? { org_id: targetOrg } : {}),
+              role: "admin", 
+              account_type: "business" 
+            }).eq("id", user.id);
+            if (targetOrg) data.org_id = targetOrg;
+            data.role = "admin";
+            data.account_type = "business";
           }
         } 
         // 2. Existing Public Individual Healing: Ensure bound to Master Org as user
@@ -1735,7 +1759,13 @@ export default function HelpdeskAI() {
 
   const activeInc = incidents.filter(i => !i.resolved);
 
-  const userRole = currentUserProfile?.role || "user";
+  const userDomain = currentUser?.email && currentUser.email.includes("@")
+    ? currentUser.email.split("@")[1].toLowerCase()
+    : "";
+  const isMasterOwner = userDomain === PLATFORM_MASTER_DOMAIN;
+
+  // Master platform owner (bizadoc.com) is ALWAYS Admin
+  const userRole = isMasterOwner ? "admin" : (currentUserProfile?.role || "user");
 
   // Strict role-based tickets view filtering:
   // Admin -> sees ALL tickets
@@ -1762,17 +1792,12 @@ export default function HelpdeskAI() {
     );
   });
 
-  // Individual account type — check profile table first, fall back to Supabase Auth metadata.
-  // The metadata fallback ensures accounts created before the account_type column was added
-  // to the profiles table still get the correct individual-only interface.
+  // Individual account type — strictly for public consumers; Master Owner is NEVER individual
   const isIndividualAccount =
-    currentUserProfile?.account_type === "individual" ||
-    currentUser?.user_metadata?.account_type === "individual";
-
-  const userDomain = currentUser?.email && currentUser.email.includes("@")
-    ? currentUser.email.split("@")[1].toLowerCase()
-    : "";
-  const isMasterOwner = userDomain === PLATFORM_MASTER_DOMAIN;
+    !isMasterOwner && (
+      currentUserProfile?.account_type === "individual" ||
+      currentUser?.user_metadata?.account_type === "individual"
+    );
 
   const allNavItems = [
     { id: "virtual-it", label: "Virtual IT Support", icon: Bot, roles: ["admin", "technician", "user"] },
