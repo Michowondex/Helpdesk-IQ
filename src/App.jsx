@@ -581,7 +581,30 @@ export default function HelpdeskAI() {
           }
         }
       } else {
-        // Multi-Tenant Provisioning: Create dedicated workspace for newly confirmed signup
+        // ── Profile not found by auth.uid: check if admin pre-provisioned this member by email ──
+        // This handles the case where an admin added the user in Staff & Member Directory
+        // before the user ever signed in (profile was created with a placeholder UUID).
+        const { data: emailMatchedProfile } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("email", user.email.toLowerCase().trim())
+          .maybeSingle();
+
+        if (emailMatchedProfile) {
+          // ✅ Found pre-provisioned profile! Claim it by updating the id to this user's auth.uid
+          // so all future lookups by id = auth.uid() succeed.
+          try {
+            await supabase.from("profiles").update({ id: user.id }).eq("email", user.email.toLowerCase().trim());
+          } catch (_) {
+            // If update fails (RLS), insert a new claimed record linking to their org
+          }
+          const claimedProfile = { ...emailMatchedProfile, id: user.id };
+          setCurrentUserProfile(claimedProfile);
+          loadData(emailMatchedProfile.org_id);
+          return;
+        }
+
+        // No pre-provisioned profile found — Multi-Tenant Provisioning for brand-new signups
         let targetOrgId = null;
         const userDomain = user.email && user.email.includes("@") ? user.email.split("@")[1].toLowerCase() : "company.com";
         const isMasterOwner = userDomain === PLATFORM_MASTER_DOMAIN;
@@ -2745,8 +2768,8 @@ export default function HelpdeskAI() {
             <div className="flex items-center gap-1 border-b border-slate-800 pb-1">
               {[
                 { id: "company", label: "Company Profile & SLA" },
-                { id: "teams",   label: `IT Teams & Routing (${teams.length})` },
-                { id: "users",   label: "User & Team Directory" },
+                { id: "teams",   label: `IT Department Queues (${teams.length})` },
+                { id: "users",   label: "Staff & Member Directory" },
                 { id: "email",   label: "Email Delivery Setup" },
                 { id: "audit",   label: "Audit Logs & Spooling" },
               ].map(st => (
@@ -2779,14 +2802,14 @@ export default function HelpdeskAI() {
 
             {settingsSubTab === "teams" && (
               <TeamManagement
-                orgId={orgConfig?.id}
+                orgId={orgConfig?.id || currentUserProfile?.org_id}
                 onTeamsChange={(updatedTeams) => setTeams(updatedTeams)}
               />
             )}
 
             {settingsSubTab === "users" && (
               <UserManagement
-                orgId={orgConfig?.id}
+                orgId={orgConfig?.id || currentUserProfile?.org_id}
                 orgConfig={orgConfig}
                 teams={teams}
               />

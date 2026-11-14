@@ -91,8 +91,8 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
     if (!fullName.trim()) return;
 
     const targetEmail = useCustomEmail 
-      ? customEmail.trim() 
-      : `${username.trim().replace(/@.*$/, "")}@${companyDomain}`;
+      ? customEmail.trim().toLowerCase()
+      : `${username.trim().replace(/@.*$/, "").toLowerCase()}@${companyDomain}`;
 
     if (!targetEmail || (!useCustomEmail && !username.trim())) {
       notify("Please enter a valid username or email", "#ef4444");
@@ -103,37 +103,52 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
 
     try {
       const tempPass = tempPassword.trim() || "BizaDesk@2026";
-      
-      // Attempt Supabase Auth account creation
-      const { data: authData, error: authErr } = await supabase.auth.signUp({
-        email: targetEmail,
-        password: tempPass,
-        options: {
-          data: {
-            full_name: fullName.trim(),
-            role: role,
-            department: department || (teams[0]?.team_name || "General IT")
-          }
-        }
-      });
+      const assignedDept = department || (teams[0]?.team_name || "General IT");
 
-      if (authErr && !authErr.message.includes("already registered")) {
-        throw authErr;
-      }
+      // ── STEP 1: Check if a profile already exists for this email ──────────
+      // (Could be a pre-existing account from a previous invite attempt)
+      const { data: existingProfile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("email", targetEmail)
+        .maybeSingle();
 
-      // Upsert profile record in public.profiles
-      const userId = authData?.user?.id || crypto.randomUUID();
+      let profileId = existingProfile?.id || crypto.randomUUID();
+
+      // ── STEP 2: Provision the member directly in public.profiles ─────────
+      // This avoids client-side supabase.auth.signUp() which requires captcha.
+      // The invited user signs in later (Google OAuth or email link),
+      // and App.jsx fetchProfile() will claim & link this profile row
+      // to their auth.uid automatically.
       const { error: profileErr } = await supabase.from("profiles").upsert({
-        id: userId,
-        org_id: orgId || null,
+        id: profileId,
+        org_id: orgId || null,          // ← Ties member to this company's org
         full_name: fullName.trim(),
         email: targetEmail,
         role: role,
-        department: department || (teams[0]?.team_name || "General IT"),
-        is_active: true
-      });
+        department: assignedDept,
+        account_type: "business",
+        is_active: true,
+        invited_by_admin: true          // ← Flag: pre-provisioned by admin
+      }, { onConflict: "email" });      // ← If email exists, update record
 
-      if (profileErr) throw profileErr;
+      if (profileErr) {
+        // Fallback: try insert with new UUID if conflict was on id
+        const { error: insertErr } = await supabase.from("profiles").insert({
+          id: crypto.randomUUID(),
+          org_id: orgId || null,
+          full_name: fullName.trim(),
+          email: targetEmail,
+          role: role,
+          department: assignedDept,
+          account_type: "business",
+          is_active: true,
+          invited_by_admin: true
+        });
+        if (insertErr && !insertErr.message?.includes("duplicate") && !insertErr.message?.includes("unique")) {
+          throw insertErr;
+        }
+      }
 
       setCreatedUserNotice({
         name: fullName.trim(),
@@ -142,7 +157,7 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
         role: ROLE_BADGES[role].label
       });
 
-      notify(`User ${fullName} added as ${ROLE_BADGES[role].label}!`);
+      notify(`✓ ${fullName} provisioned as ${ROLE_BADGES[role].label} — they can now sign in with Google or request a password reset.`);
       setFullName("");
       setUsername("");
       setCustomEmail("");
@@ -232,10 +247,10 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
             </strong>
             <div className="font-mono text-xs text-slate-300 flex flex-wrap items-center gap-3">
               <span>Login: <strong className="text-white underline">{createdUserNotice.email}</strong></span>
-              <span>Temporary Password: <strong className="text-indigo-300">{createdUserNotice.tempPass}</strong></span>
+              <span>Starter Password: <strong className="text-indigo-300">{createdUserNotice.tempPass}</strong></span>
             </div>
             <p className="text-[11px] text-emerald-400/80">
-              Share these credentials with the user so they can log in immediately from the login screen.
+              The member can sign in with <strong>Google Sign-In</strong> (if their email is a Google/Workspace account) or with the starter password above. Use the 🔑 key icon in the table to send them a secure password reset link.
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -275,8 +290,16 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
           onClick={() => setShowAddModal(true)}
           className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs px-4 py-2 rounded-lg flex items-center gap-1.5 shadow-lg shadow-indigo-950 transition-all self-start sm:self-auto"
         >
-          <UserPlus className="w-4 h-4" /> Add Team Member
+          <UserPlus className="w-4 h-4" /> Add Staff Member
         </button>
+      </div>
+
+      {/* How members sign in — info banner */}
+      <div className="bg-indigo-950/30 border border-indigo-500/20 rounded-xl px-4 py-3 text-[11px] text-indigo-300 leading-relaxed flex items-start gap-2.5">
+        <Shield className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+        <div>
+          <strong className="text-indigo-200">How provisioned members sign in:</strong> After adding a member here, they can sign in using <strong>Google Sign-In</strong> (if their email is a Google/Workspace account) or via a <strong>password reset link</strong> sent using the 🔑 key icon in the table below. Their company workspace, role, and assigned department are automatically applied on first login.
+        </div>
       </div>
 
       {/* Role Explanations Banner */}
@@ -300,8 +323,8 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
         ) : members.length === 0 ? (
           <div className="p-12 text-center text-slate-400">
             <Users className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-            <p className="text-sm font-semibold text-slate-200">No members registered yet</p>
-            <p className="text-xs text-slate-500 mt-1">Click "Add Team Member" above to invite your IT technicians or company employees.</p>
+            <p className="text-sm font-semibold text-slate-200">No members provisioned yet</p>
+            <p className="text-xs text-slate-500 mt-1">Click "Add Staff Member" above to provision IT technicians or company employees. Members sign in with Google or via password reset link.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -461,7 +484,7 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
             <div className="px-6 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
               <h3 className="font-semibold text-slate-100 text-sm flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-indigo-400" />
-                Add Workspace Member
+                Add Staff Member
               </h3>
               <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-200">
                 <X className="w-5 h-5" />
@@ -596,7 +619,7 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
                   <KeyRound className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
                 </div>
                 <p className="text-[10px] text-slate-500 mt-1">
-                  Share this temporary password with the user so they can sign in immediately.
+                  Optional: share with the user so they can sign in with email & password. They can also sign in with Google or use a password reset link at any time.
                 </p>
               </div>
 

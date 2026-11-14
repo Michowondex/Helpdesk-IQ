@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
 import { Users, Plus, Trash2, Mail, Webhook, Star, StarOff, Edit3, Check, X, Shield } from "lucide-react";
 import { supabase } from "../supabase";
 
@@ -69,7 +69,7 @@ function TeamCard({ team, onDelete, onToggleDefault, onEdit }) {
               </div>
               {team.is_default && (
                 <p className="text-[10px] text-amber-400/80 mb-1.5 font-medium">
-                  ★ Catches all tickets &amp; incidents that do not match specific department rules.
+                  â˜… Catches all tickets &amp; incidents that do not match specific department rules.
                 </p>
               )}
               <div className="flex items-center gap-1 text-xs text-slate-400">
@@ -231,10 +231,10 @@ export default function TeamManagement({ orgId, onTeamsChange }) {
         <div>
           <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
             <Users className="w-5 h-5 text-indigo-400" />
-            IT Team Directory & Routing
+            IT Department Queues & Ticket Routing
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Configure your internal support teams. Each team receives its own incident alert emails and channel notifications.
+            Configure functional department queues for ticket routing (e.g. Network Team, Security Team). To add individual technicians or staff, go to the Staff &amp; Member Directory tab.
           </p>
         </div>
         <button
@@ -265,14 +265,14 @@ export default function TeamManagement({ orgId, onTeamsChange }) {
             </div>
           </div>
           <span className="text-[10px] text-slate-500 hidden sm:block shrink-0">
-            Click ★ on any other team to switch default
+            Click â˜… on any other team to switch default
           </span>
         </div>
       ) : teams.length > 0 ? (
         <div className="bg-amber-950/30 border border-amber-500/20 rounded-xl p-4 flex items-center gap-3">
           <Star className="w-4 h-4 text-amber-400 shrink-0" />
           <span className="text-xs text-amber-300">
-            No default team set. Click the ☆ star icon on a team to set it as the fallback for all unmatched incidents.
+            No default team set. Click the â˜† star icon on a team to set it as the fallback for all unmatched incidents.
           </span>
         </div>
       ) : null}
@@ -285,7 +285,7 @@ export default function TeamManagement({ orgId, onTeamsChange }) {
           <Users className="w-8 h-8 text-slate-600 mx-auto mb-3" />
           <p className="text-slate-400 text-sm font-medium mb-1">No teams configured yet</p>
           <p className="text-xs text-slate-500">
-            Add your first team. For small IT departments, one team (e.g. "IT Support") is enough — mark it as default and all incidents will route there automatically.
+            Add your first team. For small IT departments, one team (e.g. "IT Support") is enough â€” mark it as default and all incidents will route there automatically.
           </p>
         </div>
       ) : (
@@ -311,7 +311,7 @@ export default function TeamManagement({ orgId, onTeamsChange }) {
             {Object.entries(FAILURE_LABELS).map(([key, val]) => (
               <div key={key} className="flex items-start gap-3 text-xs">
                 <span className={`font-semibold shrink-0 w-52 ${val.color}`}>{val.label}</span>
-                <span className="text-slate-500">→ {val.hint}</span>
+                <span className="text-slate-500">â†’ {val.hint}</span>
               </div>
             ))}
           </div>
@@ -407,4 +407,6 @@ export default function TeamManagement({ orgId, onTeamsChange }) {
     </div>
   );
 }
+
+
 
