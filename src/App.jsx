@@ -285,6 +285,7 @@ export default function HelpdeskAI() {
   const [cpError, setCpError] = useState("");
   const [cpSuccess, setCpSuccess] = useState("");
   const [corporateBlockNotice, setCorporateBlockNotice] = useState(null); // { companyName, domain }
+  const [accountSuspendedNotice, setAccountSuspendedNotice] = useState(null); // { name, email }
 
   const showBanner = (msg, color = "#6366f1") => {
     setAlertBanner({ msg, color });
@@ -521,6 +522,19 @@ export default function HelpdeskAI() {
     try {
       const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
       if (data) {
+        // Enforce account suspension: if an admin deactivated this member, block access immediately
+        if (data.is_active === false) {
+          await supabase.auth.signOut();
+          setCurrentUser(null);
+          setCurrentUserProfile(null);
+          setAccountSuspendedNotice({
+            email: user.email,
+            name: data.full_name || user.email
+          });
+          setLoading(false);
+          return;
+        }
+
         const userDomain = user.email && user.email.includes("@") ? user.email.split("@")[1].toLowerCase() : "";
         const isMasterOwner = userDomain === PLATFORM_MASTER_DOMAIN;
         const isIndividual = 
@@ -591,6 +605,19 @@ export default function HelpdeskAI() {
           .maybeSingle();
 
         if (emailMatchedProfile) {
+          // If the pre-provisioned account is deactivated, block access
+          if (emailMatchedProfile.is_active === false) {
+            await supabase.auth.signOut();
+            setCurrentUser(null);
+            setCurrentUserProfile(null);
+            setAccountSuspendedNotice({
+              email: user.email,
+              name: emailMatchedProfile.full_name || user.email
+            });
+            setLoading(false);
+            return;
+          }
+
           // ✅ Found pre-provisioned profile! Claim it by updating the id to this user's auth.uid
           // so all future lookups by id = auth.uid() succeed.
           try {
@@ -1863,6 +1890,40 @@ export default function HelpdeskAI() {
   }
 
   if (!currentUser) {
+    // ── Account Access Suspended Notice (Deactivated by Admin) ──
+    if (accountSuspendedNotice) {
+      return (
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-center">
+          <div className="max-w-md w-full bg-slate-900 border border-rose-900/40 rounded-2xl p-8 shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mx-auto text-rose-400">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-slate-100">Account Access Suspended</h2>
+              <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                The workspace account for <strong className="text-slate-200">{accountSuspendedNotice.name}</strong> (<span className="text-indigo-400 font-mono">{accountSuspendedNotice.email}</span>) has been suspended by your workspace administrator.
+              </p>
+            </div>
+            <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 text-left text-xs space-y-2 text-slate-300">
+              <p className="font-semibold text-rose-400 uppercase tracking-wider text-[10px]">Access Policy:</p>
+              <p>• Access to tickets, incidents, and workspace channels is currently restricted.</p>
+              <p>• If you believe this is in error, please contact your company's IT Helpdesk Administrator.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setAccountSuspendedNotice(null);
+                setShowAuthScreen(false);
+              }}
+              className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-medium text-xs transition-colors border border-slate-700"
+            >
+              Back to Home
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     // ── Corporate Member Block Notice (Admin Invitation Required) ──
     if (corporateBlockNotice) {
       return (

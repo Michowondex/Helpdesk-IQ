@@ -170,13 +170,49 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
   };
 
   const handleDeleteMember = async (member) => {
-    if (!confirm(`Are you sure you want to remove ${member.full_name || member.email}?`)) return;
+    const confirmMsg = `Are you sure you want to permanently delete ${member.full_name || member.email}?\n\nTip: You can click the Suspend button instead to revoke their login access while keeping their resolution history intact.`;
+    if (!confirm(confirmMsg)) return;
     try {
       await supabase.from("profiles").delete().eq("id", member.id);
       notify(`Removed ${member.full_name || member.email}`, "#64748b");
       loadMembers();
     } catch (err) {
       notify(`Error deleting user: ${err.message}`, "#ef4444");
+    }
+  };
+
+  const handleToggleSuspend = async (member) => {
+    const isCurrentlyActive = member.is_active !== false;
+    const nextActiveState = !isCurrentlyActive;
+    const actionName = nextActiveState ? "Reactivated" : "Suspended";
+
+    const confirmMsg = nextActiveState
+      ? `Reactivate workspace access for ${member.full_name || member.email}?`
+      : `Suspend workspace access for ${member.full_name || member.email}?\n\nTheir login will be disabled immediately, but all their past tickets, incident logs, and resolution history remain 100% preserved.`;
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ is_active: nextActiveState })
+        .eq("id", member.id);
+
+      if (error) throw error;
+
+      try {
+        await supabase.from("session_audit_logs").insert({
+          org_id: orgId || null,
+          user_name: member.full_name || member.email,
+          action: `Account ${actionName.toUpperCase()} by Admin`,
+          details: `Active status changed to ${nextActiveState}`
+        });
+      } catch (_) {}
+
+      notify(`${member.full_name || member.email} has been ${actionName}!`);
+      loadMembers();
+    } catch (err) {
+      notify(`Failed to update status: ${err.message}`, "#ef4444");
     }
   };
 
@@ -340,13 +376,17 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
               <tbody className="divide-y divide-slate-800/60">
                 {members.map((m) => {
                   const roleConfig = ROLE_BADGES[m.role] || ROLE_BADGES.user;
+                  const isSuspended = m.is_active === false;
                   return (
-                    <tr key={m.id} className="hover:bg-slate-800/30 transition-colors">
+                    <tr key={m.id} className={`transition-colors ${isSuspended ? "bg-rose-950/10 opacity-75 hover:bg-rose-950/20" : "hover:bg-slate-800/30"}`}>
                       <td className="py-3 px-4 font-semibold text-slate-200 flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-indigo-400 font-bold text-xs uppercase">
+                        <div className={`w-7 h-7 rounded-full border flex items-center justify-center font-bold text-xs uppercase ${isSuspended ? "bg-rose-950/40 border-rose-800 text-rose-400" : "bg-slate-800 border-slate-700 text-indigo-400"}`}>
                           {(m.full_name || m.email || "U")[0]}
                         </div>
-                        <span>{m.full_name || "Unnamed"}</span>
+                        <div className="flex flex-col">
+                          <span className={isSuspended ? "text-slate-400 line-through" : ""}>{m.full_name || "Unnamed"}</span>
+                          {isSuspended && <span className="text-[9px] text-rose-400 font-normal">Access Suspended</span>}
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">{m.email}</td>
                       <td className="py-3 px-4">
@@ -358,7 +398,11 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
                         {m.department || <em className="text-slate-600">General IT</em>}
                       </td>
                       <td className="py-3 px-4">
-                        {m.role === "technician" || m.role === "admin" ? (
+                        {isSuspended ? (
+                          <span className="inline-flex items-center gap-1 text-rose-400 text-[11px] font-bold bg-rose-500/15 border border-rose-500/30 px-2 py-0.5 rounded">
+                            <UserX className="w-3 h-3" /> Suspended
+                          </span>
+                        ) : m.role === "technician" || m.role === "admin" ? (
                           <div className="flex items-center gap-2">
                             <select
                               value={m.availability_status || (m.is_available === false ? "away" : "active")}
@@ -386,6 +430,13 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button
+                            onClick={() => handleToggleSuspend(m)}
+                            className={`p-1 transition-colors ${isSuspended ? "text-emerald-400 hover:text-emerald-300" : "text-slate-500 hover:text-amber-400"}`}
+                            title={isSuspended ? "Reactivate member account" : "Suspend / Disable access (Preserves past tickets & history)"}
+                          >
+                            {isSuspended ? <UserCheck className="w-4 h-4" /> : <UserX className="w-4 h-4" />}
+                          </button>
+                          <button
                             onClick={() => { setResetTarget(m); setResetSent(false); }}
                             className="text-slate-500 hover:text-indigo-400 p-1 transition-colors"
                             title="Send password reset link"
@@ -395,7 +446,7 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
                           <button
                             onClick={() => handleDeleteMember(m)}
                             className="text-slate-500 hover:text-rose-400 p-1 transition-colors"
-                            title="Remove user"
+                            title="Remove user permanently"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
