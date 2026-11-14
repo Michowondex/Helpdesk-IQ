@@ -38,6 +38,9 @@ export default function CompanySettings({
     support_whatsapp: orgConfig?.support_whatsapp || "",
     incident_sla_minutes: orgConfig?.incident_sla_minutes || 10,
     ticket_sla_hours: orgConfig?.ticket_sla_hours || 1,
+    work_start_hour: orgConfig?.work_start_hour !== undefined ? orgConfig.work_start_hour : 8,
+    work_end_hour: orgConfig?.work_end_hour !== undefined ? orgConfig.work_end_hour : 18,
+    work_days: orgConfig?.work_days || "1,2,3,4,5",
     vpn_gateway: orgConfig?.vpn_gateway || "vpn.company.com",
     enable_global_kb: isMasterPlatformOrg ? true : (orgConfig?.enable_global_kb === true),
     enforce_mfa: orgConfig?.enforce_mfa === true,
@@ -159,6 +162,9 @@ export default function CompanySettings({
         support_whatsapp: orgConfig.support_whatsapp !== undefined ? orgConfig.support_whatsapp : prev.support_whatsapp,
         incident_sla_minutes: orgConfig.incident_sla_minutes || prev.incident_sla_minutes,
         ticket_sla_hours: orgConfig.ticket_sla_hours || prev.ticket_sla_hours,
+        work_start_hour: orgConfig.work_start_hour !== undefined ? orgConfig.work_start_hour : prev.work_start_hour,
+        work_end_hour: orgConfig.work_end_hour !== undefined ? orgConfig.work_end_hour : prev.work_end_hour,
+        work_days: orgConfig.work_days || prev.work_days,
         vpn_gateway: orgConfig.vpn_gateway || prev.vpn_gateway,
         enable_global_kb: isMasterPlatformOrg ? true : (orgConfig.enable_global_kb !== undefined ? orgConfig.enable_global_kb : prev.enable_global_kb),
         enforce_mfa: orgConfig.enforce_mfa !== undefined ? orgConfig.enforce_mfa : prev.enforce_mfa,
@@ -822,6 +828,54 @@ export default function CompanySettings({
               <p className="text-[11px] text-slate-500 mt-2">
                 Mark open tickets with red SLA Breached badge and alert managers if unresolved.
               </p>
+            </div>
+          </div>
+
+          {/* Business Operating Hours & SLA Auto-Pause */}
+          <div className="mt-4 pt-4 border-t border-slate-800/80">
+            <div className="flex items-center gap-2 mb-3">
+              <Clock className="w-4 h-4 text-emerald-400" />
+              <h4 className="text-xs font-semibold text-slate-200">Business Hours &amp; Automatic SLA Pause</h4>
+            </div>
+            <p className="text-[11px] text-slate-400 mb-3">
+              Configure operating hours. Ticket SLA timers will automatically <strong>pause outside these hours</strong> and over weekends, preventing false SLA breaches overnight.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950/60 border border-slate-800/80 rounded-lg p-3.5">
+              <div>
+                <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
+                  Business Day Starts At:
+                </label>
+                <select
+                  value={form.work_start_hour}
+                  onChange={(e) => setForm({ ...form, work_start_hour: Number(e.target.value) })}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  <option value={6}>06:00 AM</option>
+                  <option value={7}>07:00 AM</option>
+                  <option value={8}>08:00 AM (Default)</option>
+                  <option value={9}>09:00 AM</option>
+                  <option value={10}>10:00 AM</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
+                  Business Day Closes At:
+                </label>
+                <select
+                  value={form.work_end_hour}
+                  onChange={(e) => setForm({ ...form, work_end_hour: Number(e.target.value) })}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  <option value={16}>04:00 PM (16:00)</option>
+                  <option value={17}>05:00 PM (17:00)</option>
+                  <option value={18}>06:00 PM (18:00 - Default)</option>
+                  <option value={19}>07:00 PM (19:00)</option>
+                  <option value={20}>08:00 PM (20:00)</option>
+                  <option value={21}>09:00 PM (21:00)</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>

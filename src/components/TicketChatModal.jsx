@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { MessageSquare, Send, Shield, User, Clock, CheckCircle2, AlertCircle, X, Lock, Paperclip, Monitor, Globe, Cpu, Copy, Check, RefreshCw, Key, Share2, GitBranch } from "lucide-react";
+import { MessageSquare, Send, Shield, User, Clock, CheckCircle2, AlertCircle, X, Lock, Paperclip, Monitor, Globe, Cpu, Copy, Check, RefreshCw, Key, Share2, GitBranch, Pause } from "lucide-react";
 import { supabase } from "../supabase";
+import { calculateBusinessSla } from "../App";
 
 export default function TicketChatModal({ ticket, currentUser, currentUserProfile, orgConfig, teams = [], members = [], onClose, onTicketUpdated }) {
   const [messages, setMessages] = useState([]);
@@ -21,14 +22,18 @@ export default function TicketChatModal({ ticket, currentUser, currentUserProfil
   const [rerouteTechId, setRerouteTechId] = useState(ticket?.assigned_to || "auto");
   const [savingReroute, setSavingReroute] = useState(false);
 
-  // Live SLA calculation
+  // Live SLA calculation (With Business Hours Pause)
   const slaHours = Number(orgConfig?.ticket_sla_hours) || 1;
-  const slaMs = slaHours * 3600000;
-  const elapsedMs = Math.max(0, Date.now() - (ticket?.created || Date.now()));
-  const remainingMs = slaMs - elapsedMs;
-  const isBreached = remainingMs <= 0 || ticket?.sla_breached;
-  const pctRemaining = Math.max(0, Math.min(100, Math.round((remainingMs / slaMs) * 100)));
-  const remainingMins = Math.abs(Math.round(remainingMs / 60000));
+  const slaData = calculateBusinessSla({
+    createdTimestamp: ticket?.created,
+    slaHours,
+    workStartHour: orgConfig?.work_start_hour ?? 8,
+    workEndHour: orgConfig?.work_end_hour ?? 18,
+    workDaysStr: orgConfig?.work_days || "1,2,3,4,5",
+    isBreachedDirect: ticket?.sla_breached,
+    resolvedTimestamp: ticket?.resolved_at
+  });
+  const { isBreached, remainingMins, breachMins, pctRemaining, isPaused, nextResumeText } = slaData;
 
   // Pure technicians list (strictly excluding Admins)
   const pureTechs = members.filter(m => m.role === "technician" && m.is_active !== false);
@@ -295,24 +300,30 @@ export default function TicketChatModal({ ticket, currentUser, currentUserProfil
         {/* Live SLA Progress Bar */}
         <div className="px-5 py-2.5 bg-slate-950 border-b border-slate-800 shrink-0 space-y-1">
           <div className="flex items-center justify-between text-xs">
-            <span className={`font-semibold flex items-center gap-1.5 ${
-              currentStatus === "RESOLVED" 
-                ? "text-emerald-400" 
-                : isBreached 
-                ? "text-rose-400 animate-pulse" 
-                : pctRemaining < 25 
-                ? "text-rose-400" 
-                : pctRemaining < 50 
-                ? "text-amber-400" 
-                : "text-slate-300"
-            }`}>
-              <Clock className="w-3.5 h-3.5" />
-              {currentStatus === "RESOLVED"
-                ? `Resolved in ${Math.max(1, Math.round(((ticket.resolved_at || Date.now()) - ticket.created) / 60000))}m`
-                : isBreached
-                ? `🚨 SLA Breached by ${remainingMins}m`
-                : `${remainingMins}m remaining before breach`}
-            </span>
+            {currentStatus === "RESOLVED" ? (
+              <span className="font-semibold flex items-center gap-1.5 text-emerald-400">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Resolved in {Math.max(1, Math.round((slaData.businessElapsedMs || (Date.now() - ticket.created)) / 60000))}m business time</span>
+              </span>
+            ) : isPaused ? (
+              <span className="font-semibold flex items-center gap-1.5 text-sky-400">
+                <Pause className="w-3.5 h-3.5 animate-pulse" />
+                <span>⏸️ SLA Paused (Resumes {nextResumeText}) • {remainingMins}m remaining</span>
+              </span>
+            ) : (
+              <span className={`font-semibold flex items-center gap-1.5 ${
+                isBreached 
+                  ? "text-rose-400 animate-pulse" 
+                  : pctRemaining < 25 
+                  ? "text-rose-400" 
+                  : pctRemaining < 50 
+                  ? "text-amber-400" 
+                  : "text-slate-300"
+              }`}>
+                <Clock className="w-3.5 h-3.5" />
+                {isBreached ? `🚨 SLA Breached by ${breachMins}m` : `${remainingMins}m remaining before breach`}
+              </span>
+            )}
             <div className="flex items-center gap-2 text-[11px] text-slate-400">
               <span>Queue: <strong className="text-indigo-300">{ticket.team}</strong></span>
               <span>• Assignee: <strong className="text-slate-200">{ticket.assignee_name || "Unassigned"}</strong></span>
@@ -325,6 +336,8 @@ export default function TicketChatModal({ ticket, currentUser, currentUserProfil
                   ? "bg-emerald-500"
                   : isBreached
                   ? "bg-rose-500 animate-pulse"
+                  : isPaused
+                  ? "bg-sky-500/70"
                   : pctRemaining < 25
                   ? "bg-rose-500"
                   : pctRemaining < 50

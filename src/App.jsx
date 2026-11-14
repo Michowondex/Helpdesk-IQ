@@ -4,7 +4,8 @@ import {
   Plus, CheckCircle2, RefreshCw, Trash2, Clock, ShieldAlert,
   ChevronRight, Building2, Flame, HelpCircle, LogOut, User, Users,
   Monitor, Cpu, Globe, Sparkles, MessageSquare, KeyRound, X, Eye, EyeOff,
-  Sun, Moon, Scale, ShieldCheck, MapPin, Phone, GitBranch, Shield
+  Sun, Moon, Scale, ShieldCheck, MapPin, Phone, GitBranch, Shield,
+  Coffee, Pause, Play
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { pingEndpoint } from "./engine/healthPingEngine";
@@ -106,28 +107,116 @@ function EmailModal({ email, onClose }) {
   );
 }
 
-// ── Live SLA Progress Bar for Tickets ─────────────────────────────────────────
-function TicketSlaBar({ ticket, slaHours = 1 }) {
+// ── Business Hours SLA Calculator ───────────────────────────────────────────
+export function calculateBusinessSla({
+  createdTimestamp,
+  slaHours = 1,
+  workStartHour = 8,
+  workEndHour = 18,
+  workDaysStr = "1,2,3,4,5",
+  isBreachedDirect = false,
+  resolvedTimestamp = null
+}) {
+  const slaMs = (Number(slaHours) || 1) * 3600000;
+  const created = Number(createdTimestamp) || Date.now();
+  const endTarget = resolvedTimestamp ? Number(resolvedTimestamp) : Date.now();
+  const startHour = Number(workStartHour) ?? 8;
+  const endHour = Number(workEndHour) ?? 18;
+  const workDays = (workDaysStr || "1,2,3,4,5").split(",").map(d => Number(d.trim()));
+
+  const now = new Date(endTarget);
+  const nowDay = now.getDay();
+  const nowDecimalHour = now.getHours() + (now.getMinutes() / 60);
+  const isWorkingDay = workDays.includes(nowDay);
+  const isWorkingHour = nowDecimalHour >= startHour && nowDecimalHour < endHour;
+  const isCurrentlyBusinessHours = isWorkingDay && isWorkingHour;
+
+  let nextResumeText = `${startHour}:00 AM`;
+  if (!isWorkingDay) {
+    nextResumeText = "Monday 8:00 AM";
+  } else if (nowDecimalHour >= endHour) {
+    nextResumeText = `Tomorrow ${startHour}:00 AM`;
+  } else if (nowDecimalHour < startHour) {
+    nextResumeText = `Today ${startHour}:00 AM`;
+  }
+
+  let businessElapsedMs = 0;
+  if (endTarget > created) {
+    let curr = new Date(created);
+    let guard = 0;
+    while (curr.getTime() < endTarget && guard < 60) {
+      guard++;
+      const curDay = curr.getDay();
+      if (workDays.includes(curDay)) {
+        const y = curr.getFullYear();
+        const m = curr.getMonth();
+        const d = curr.getDate();
+        const dayBusinessStart = new Date(y, m, d, startHour, 0, 0, 0).getTime();
+        const dayBusinessEnd = new Date(y, m, d, endHour, 0, 0, 0).getTime();
+
+        const windowStart = Math.max(created, dayBusinessStart);
+        const windowEnd = Math.min(endTarget, dayBusinessEnd);
+        if (windowEnd > windowStart) {
+          businessElapsedMs += (windowEnd - windowStart);
+        }
+      }
+      curr = new Date(curr.getFullYear(), curr.getMonth(), curr.getDate() + 1, 0, 0, 0, 0);
+    }
+  }
+
+  const remainingMs = slaMs - businessElapsedMs;
+  const isBreached = Boolean(isBreachedDirect) || remainingMs <= 0;
+  const pctRemaining = Math.max(0, Math.min(100, Math.round((remainingMs / slaMs) * 100)));
+  const remainingMins = Math.max(0, Math.round(remainingMs / 60000));
+  const breachMins = Math.max(1, Math.round(Math.abs(remainingMs) / 60000));
+  const isPaused = !resolvedTimestamp && !isCurrentlyBusinessHours && !isBreached;
+
+  return {
+    businessElapsedMs,
+    remainingMs,
+    remainingMins,
+    breachMins,
+    isBreached,
+    pctRemaining,
+    isPaused,
+    nextResumeText,
+    isCurrentlyBusinessHours
+  };
+}
+
+// ── Live SLA Progress Bar for Tickets (With Business Hours Pause) ────────────
+function TicketSlaBar({ ticket, slaHours = 1, orgConfig = null }) {
   const isResolved = ticket.status === "RESOLVED";
+  const startHour = orgConfig?.work_start_hour ?? 8;
+  const endHour = orgConfig?.work_end_hour ?? 18;
+  const workDays = orgConfig?.work_days || "1,2,3,4,5";
+
+  const slaData = calculateBusinessSla({
+    createdTimestamp: ticket.created,
+    slaHours,
+    workStartHour: startHour,
+    workEndHour: endHour,
+    workDaysStr: workDays,
+    isBreachedDirect: ticket.sla_breached,
+    resolvedTimestamp: ticket.resolved_at
+  });
+
   if (isResolved) {
-    const totalMins = Math.max(1, Math.round(((ticket.resolved_at || ticket.created || Date.now()) - ticket.created) / 60000));
+    const totalMins = Math.max(1, Math.round((slaData.businessElapsedMs || (Date.now() - ticket.created)) / 60000));
     return (
       <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-medium mt-2">
         <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
-        <span>Resolved in {totalMins}m {ticket.sla_breached ? "(SLA Breached)" : "(Within SLA ✓)"}</span>
+        <span>Resolved in {totalMins}m business time {ticket.sla_breached ? "(SLA Breached)" : "(Within SLA ✓)"}</span>
       </div>
     );
   }
 
-  const slaMs = slaHours * 3600000;
-  const elapsedMs = Math.max(0, Date.now() - (ticket.created || Date.now()));
-  const remainingMs = slaMs - elapsedMs;
-  const isBreached = remainingMs <= 0 || ticket.sla_breached;
-  const pctRemaining = Math.max(0, Math.min(100, Math.round((remainingMs / slaMs) * 100)));
-  const remainingMins = Math.abs(Math.round(remainingMs / 60000));
+  const { isBreached, remainingMins, breachMins, pctRemaining, isPaused, nextResumeText } = slaData;
 
   const barColor = isBreached
     ? "bg-rose-500 animate-pulse"
+    : isPaused
+    ? "bg-sky-500/70"
     : pctRemaining < 25
     ? "bg-rose-500"
     : pctRemaining < 50
@@ -137,13 +226,22 @@ function TicketSlaBar({ ticket, slaHours = 1 }) {
   return (
     <div className="space-y-1 mt-2.5 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80">
       <div className="flex items-center justify-between text-[11px]">
-        <span className={`font-semibold flex items-center gap-1.5 ${
-          isBreached ? "text-rose-400 animate-pulse" : pctRemaining < 25 ? "text-rose-400" : pctRemaining < 50 ? "text-amber-400" : "text-slate-300"
-        }`}>
-          <Clock className="w-3.5 h-3.5 shrink-0" />
-          {isBreached ? `🚨 SLA Breached by ${remainingMins}m` : `${remainingMins}m remaining before breach`}
+        {isPaused ? (
+          <span className="font-semibold flex items-center gap-1.5 text-sky-400">
+            <Pause className="w-3.5 h-3.5 shrink-0 animate-pulse" />
+            <span>⏸️ SLA Paused (Resumes {nextResumeText}) • {remainingMins}m left</span>
+          </span>
+        ) : (
+          <span className={`font-semibold flex items-center gap-1.5 ${
+            isBreached ? "text-rose-400 animate-pulse" : pctRemaining < 25 ? "text-rose-400" : pctRemaining < 50 ? "text-amber-400" : "text-slate-300"
+          }`}>
+            <Clock className="w-3.5 h-3.5 shrink-0" />
+            {isBreached ? `🚨 SLA Breached by ${breachMins}m` : `${remainingMins}m remaining before breach`}
+          </span>
+        )}
+        <span className="text-[10px] text-slate-500 font-mono">
+          {isPaused ? "Business Hours SLA" : `SLA Target: ${slaHours}h`}
         </span>
-        <span className="text-[10px] text-slate-500 font-mono">SLA Target: {slaHours}h</span>
       </div>
       <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
         <div
@@ -891,6 +989,26 @@ export default function HelpdeskAI() {
     setCurrentUserProfile(null);
   };
 
+  // ── Technician Break Overdue Monitor ────────────────────────────────────────
+  useEffect(() => {
+    if (userRole !== "technician" || !currentUserProfile?.break_started_at) return;
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - currentUserProfile.break_started_at;
+      const durationMs = (currentUserProfile.break_duration_minutes || 15) * 60000;
+      if (elapsed > durationMs && !currentUserProfile.break_overdue) {
+        supabase
+          .from("profiles")
+          .update({ break_overdue: true })
+          .eq("id", currentUserProfile.id)
+          .then(() => {
+            setCurrentUserProfile(prev => ({ ...prev, break_overdue: true }));
+          })
+          .catch(err => console.warn("Failed to flag overdue break:", err));
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [userRole, currentUserProfile?.break_started_at, currentUserProfile?.break_duration_minutes, currentUserProfile?.break_overdue, currentUserProfile?.id]);
+
   // ── PCI-DSS / ISO 27001 Inactivity Session Timeout (15 minutes) ──────
   // Automatically signs the user out after 15 minutes of inactivity for security compliance
   useEffect(() => {
@@ -1036,6 +1154,75 @@ export default function HelpdeskAI() {
             setIncidents(prev => prev.map(i => i.id === payload.new.id ? payload.new : i));
           } else if (payload.eventType === "DELETE") {
             setIncidents(prev => prev.filter(i => i.id !== payload.old.id));
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "organizations",
+          filter: `id=eq.${activeOrgId}`
+        },
+        (payload) => {
+          if (payload.new) {
+            setOrgConfig(prev => ({ ...prev, ...payload.new }));
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "knowledge_base",
+          filter: `org_id=eq.${activeOrgId}`
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setCustomArticles(prev => prev.some(a => a.id === payload.new.id) ? prev : [payload.new, ...prev]);
+          } else if (payload.eventType === "UPDATE") {
+            setCustomArticles(prev => prev.map(a => a.id === payload.new.id ? payload.new : a));
+          } else if (payload.eventType === "DELETE") {
+            setCustomArticles(prev => prev.filter(a => a.id !== payload.old.id));
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "teams",
+          filter: `org_id=eq.${activeOrgId}`
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setTeams(prev => prev.some(t => t.id === payload.new.id) ? prev : [...prev, payload.new]);
+          } else if (payload.eventType === "UPDATE") {
+            setTeams(prev => prev.map(t => t.id === payload.new.id ? payload.new : t));
+          } else if (payload.eventType === "DELETE") {
+            setTeams(prev => prev.filter(t => t.id !== payload.old.id));
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "profiles",
+          filter: `org_id=eq.${activeOrgId}`
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setMembers(prev => prev.some(m => m.id === payload.new.id) ? prev : [...prev, payload.new]);
+          } else if (payload.eventType === "UPDATE") {
+            setMembers(prev => prev.map(m => m.id === payload.new.id ? { ...m, ...payload.new } : m));
+            setCurrentUserProfile(prev => (prev && prev.id === payload.new.id ? { ...prev, ...payload.new } : prev));
+          } else if (payload.eventType === "DELETE") {
+            setMembers(prev => prev.filter(m => m.id !== payload.old.id));
           }
         }
       )
@@ -1503,6 +1690,86 @@ export default function HelpdeskAI() {
     loadData();
   };
 
+  // ── Technician Timed Break Handlers (Anti-Dodge Guardrails) ──────────────────
+  const handleStartBreak = async (breakType, durationMinutes) => {
+    if (!currentUserProfile?.id) return;
+    const now = Date.now();
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          availability_status: "break",
+          is_available: false,
+          break_type: breakType,
+          break_started_at: now,
+          break_duration_minutes: durationMinutes,
+          break_overdue: false
+        })
+        .eq("id", currentUserProfile.id);
+
+      if (!error) {
+        await supabase.from("session_audit_logs").insert({
+          org_id: currentUserProfile.org_id || orgConfig?.id || null,
+          user_name: currentUserProfile.full_name || currentUserProfile.email,
+          action: `Started Break: ${breakType.toUpperCase()} (${durationMinutes}m)`,
+          details: `Technician timed break initiated. Automatically excluded from ticket auto-routing.`
+        });
+
+        setCurrentUserProfile(prev => ({
+          ...prev,
+          availability_status: "break",
+          is_available: false,
+          break_type: breakType,
+          break_started_at: now,
+          break_duration_minutes: durationMinutes,
+          break_overdue: false
+        }));
+        showBanner(`⏳ Break started (${breakType === "lunch" ? "Lunch" : breakType === "tea" ? "Bio/Tea" : "Meeting"} — ${durationMinutes}m). Ticket auto-routing is paused for you.`, "#f59e0b");
+      }
+    } catch (err) {
+      console.error("Failed to start break:", err);
+    }
+  };
+
+  const handleEndBreak = async () => {
+    if (!currentUserProfile?.id) return;
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          availability_status: "active",
+          is_available: true,
+          break_type: null,
+          break_started_at: null,
+          break_duration_minutes: null,
+          break_overdue: false
+        })
+        .eq("id", currentUserProfile.id);
+
+      if (!error) {
+        await supabase.from("session_audit_logs").insert({
+          org_id: currentUserProfile.org_id || orgConfig?.id || null,
+          user_name: currentUserProfile.full_name || currentUserProfile.email,
+          action: `Ended Break: RESUMED DUTY`,
+          details: `Technician returned to active duty. Resumed receiving auto-assigned tickets.`
+        });
+
+        setCurrentUserProfile(prev => ({
+          ...prev,
+          availability_status: "active",
+          is_available: true,
+          break_type: null,
+          break_started_at: null,
+          break_duration_minutes: null,
+          break_overdue: false
+        }));
+        showBanner("🟢 Welcome back! You are now Available and on duty.", "#10b981");
+      }
+    } catch (err) {
+      console.error("Failed to end break:", err);
+    }
+  };
+
   const submitTicket = async (customTicketData) => {
     const id = `TKT-${String(100 + tickets.length + 1)}`;
     const teamMap = {
@@ -1541,7 +1808,7 @@ export default function HelpdeskAI() {
         m.department && m.department.toLowerCase() === initialTeam.toLowerCase()
       );
       const availableTeamTechs = teamTechs.filter(m => 
-        m.is_available !== false && m.availability_status !== "away" && m.availability_status !== "leave"
+        m.is_available !== false && m.availability_status !== "away" && m.availability_status !== "leave" && m.availability_status !== "break" && !m.break_type
       );
 
       if (availableTeamTechs.length > 0) {
@@ -1555,7 +1822,7 @@ export default function HelpdeskAI() {
         const fallbackTechs = pureTechs.filter(m => 
           (!m.department || m.department.toLowerCase() === defaultOrgTeam.toLowerCase() || 
            m.department.toLowerCase() === "it helpdesk" || m.department.toLowerCase() === "it support") &&
-          m.is_available !== false && m.availability_status !== "away" && m.availability_status !== "leave"
+          m.is_available !== false && m.availability_status !== "away" && m.availability_status !== "leave" && m.availability_status !== "break" && !m.break_type
         );
 
         if (fallbackTechs.length > 0) {
@@ -1781,7 +2048,7 @@ export default function HelpdeskAI() {
       } else {
         const teamTechs = pureTechs.filter(m => 
           (!m.department || m.department.toLowerCase() === targetTeam.toLowerCase() || m.department === "General IT" || m.department === "IT Support") &&
-          m.is_available !== false && m.availability_status !== "away" && m.availability_status !== "leave"
+          m.is_available !== false && m.availability_status !== "away" && m.availability_status !== "leave" && m.availability_status !== "break" && !m.break_type
         );
         if (teamTechs.length > 0) {
           const picked = teamTechs[Math.floor(Math.random() * teamTechs.length)];
@@ -2534,6 +2801,86 @@ export default function HelpdeskAI() {
               onNotificationClick={handleNotificationClick}
             />
 
+            {/* Technician Timed Break Control & Anti-Dodge Guardrail */}
+            {userRole === "technician" && (() => {
+              const isOnBreak = currentUserProfile?.availability_status === "break" || Boolean(currentUserProfile?.break_type);
+              if (isOnBreak) {
+                const breakStarted = Number(currentUserProfile?.break_started_at) || Date.now();
+                const durationMs = (Number(currentUserProfile?.break_duration_minutes) || 15) * 60000;
+                const elapsedBreak = Math.max(0, Date.now() - breakStarted);
+                const remBreakMs = durationMs - elapsedBreak;
+                const isBreakOverdue = remBreakMs <= 0 || currentUserProfile?.break_overdue;
+                const remBreakMins = Math.max(1, Math.round(remBreakMs / 60000));
+                const overdueBreakMins = Math.max(1, Math.round(Math.abs(remBreakMs) / 60000));
+                const breakLabel = currentUserProfile?.break_type === "lunch" ? "Lunch" : currentUserProfile?.break_type === "tea" ? "Bio/Tea" : currentUserProfile?.break_type === "meeting" ? "Meeting" : "Break";
+
+                return (
+                  <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border ${
+                    isBreakOverdue
+                      ? "bg-rose-500/15 border-rose-500/40 text-rose-300 animate-pulse"
+                      : "bg-amber-500/15 border-amber-500/30 text-amber-300"
+                  }`}>
+                    <Coffee className="w-3.5 h-3.5 shrink-0" />
+                    <span className="font-semibold text-[11px]">
+                      {isBreakOverdue
+                        ? `🚨 Overdue ${breakLabel} (+${overdueBreakMins}m)`
+                        : `⏳ On ${breakLabel} (${remBreakMins}m left)`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleEndBreak}
+                      className="ml-1 px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] shadow transition-colors cursor-pointer"
+                      title="Return from break and resume receiving tickets"
+                    >
+                      I'm Back ✓
+                    </button>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="relative group">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 text-xs font-medium transition-colors cursor-pointer"
+                    title="Take a scheduled break (Lunch, Bio/Tea, Meeting). Pauses incoming ticket assignment."
+                  >
+                    <Coffee className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-[11px] font-semibold">Break</span>
+                  </button>
+                  <div className="absolute right-0 top-full mt-1 w-44 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-1 hidden group-hover:block z-50">
+                    <div className="px-2 py-1 text-[10px] text-slate-400 uppercase font-bold tracking-wider border-b border-slate-800 mb-1">
+                      Schedule Break
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleStartBreak("lunch", 45)}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-800 text-slate-200 flex items-center justify-between cursor-pointer"
+                    >
+                      <span>🥪 Lunch Break</span>
+                      <span className="text-[10px] text-amber-400 font-mono">45m</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleStartBreak("tea", 15)}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-800 text-slate-200 flex items-center justify-between cursor-pointer"
+                    >
+                      <span>☕ Tea / Bio</span>
+                      <span className="text-[10px] text-emerald-400 font-mono">15m</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleStartBreak("meeting", 30)}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-800 text-slate-200 flex items-center justify-between cursor-pointer"
+                    >
+                      <span>👥 Meeting / Training</span>
+                      <span className="text-[10px] text-indigo-400 font-mono">30m</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="flex items-center gap-2 pl-3 border-l border-slate-800">
               <div className="w-7 h-7 rounded-full bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-300 font-bold text-xs uppercase">
                 {(currentUserProfile?.full_name || currentUser.email || "U")[0]}
@@ -3076,8 +3423,8 @@ export default function HelpdeskAI() {
                             </div>
                           )}
 
-                          {/* Live Dynamic SLA Countdown Bar */}
-                          <TicketSlaBar ticket={t} slaHours={orgConfig?.ticket_sla_hours || 1} />
+                          {/* Live Dynamic SLA Countdown Bar (With Business Hours Pause) */}
+                          <TicketSlaBar ticket={t} slaHours={orgConfig?.ticket_sla_hours || 1} orgConfig={orgConfig} />
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0 flex-wrap">

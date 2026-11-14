@@ -240,10 +240,17 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
   const handleToggleAvailability = async (member, newStatus) => {
     try {
       const isAvailable = newStatus === "active";
-      const { error } = await supabase.from("profiles").update({
+      const updatePayload = {
         availability_status: newStatus,
         is_available: isAvailable
-      }).eq("id", member.id);
+      };
+      if (newStatus === "active") {
+        updatePayload.break_type = null;
+        updatePayload.break_started_at = null;
+        updatePayload.break_duration_minutes = null;
+        updatePayload.break_overdue = false;
+      }
+      const { error } = await supabase.from("profiles").update(updatePayload).eq("id", member.id);
 
       if (error) throw error;
 
@@ -405,24 +412,55 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
                             <UserX className="w-3 h-3" /> Suspended
                           </span>
                         ) : m.role === "technician" || m.role === "admin" ? (
-                          <div className="flex items-center gap-2">
-                            <select
-                              value={m.availability_status || (m.is_available === false ? "away" : "active")}
-                              onChange={(e) => handleToggleAvailability(m, e.target.value)}
-                              className={`text-[11px] font-semibold rounded-lg px-2 py-1 border focus:outline-none transition-colors cursor-pointer ${
-                                (m.availability_status === "away" || m.is_available === false)
-                                  ? "bg-amber-950/50 text-amber-300 border-amber-800"
-                                  : m.availability_status === "leave"
-                                  ? "bg-blue-950/50 text-blue-300 border-blue-800"
-                                  : "bg-emerald-950/50 text-emerald-300 border-emerald-800"
-                              }`}
-                              title="Admin controlled: changes whether this technician receives auto-assigned tickets"
-                            >
-                              <option value="active">● Available (Duty)</option>
-                              <option value="away">⏸ On Break / Away</option>
-                              <option value="leave">🏖 On Official Leave</option>
-                            </select>
-                          </div>
+                          m.break_type || m.availability_status === "break" ? (
+                            (() => {
+                              const breakElapsed = Date.now() - (m.break_started_at || Date.now());
+                              const breakLimit = (m.break_duration_minutes || 15) * 60000;
+                              const isOverdue = breakElapsed > breakLimit || m.break_overdue;
+                              const remMins = Math.max(1, Math.round((breakLimit - breakElapsed) / 60000));
+                              const overdueMins = Math.max(1, Math.round((breakElapsed - breakLimit) / 60000));
+                              const breakLabel = m.break_type === "lunch" ? "Lunch" : m.break_type === "tea" ? "Bio/Tea" : m.break_type === "meeting" ? "Meeting" : "Break";
+                              return (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {isOverdue ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse" title="Technician exceeded their scheduled break duration">
+                                      🚨 Overdue {breakLabel} (+{overdueMins}m)
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                      ⏳ On {breakLabel} ({remMins}m left)
+                                    </span>
+                                  )}
+                                  <button
+                                    onClick={() => handleToggleAvailability(m, "active")}
+                                    className="text-[10px] text-slate-400 hover:text-emerald-400 underline font-medium cursor-pointer"
+                                    title="Admin: Recall technician and reset status to Active Duty"
+                                  >
+                                    Recall
+                                  </button>
+                                </div>
+                              );
+                            })()
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={m.availability_status || (m.is_available === false ? "away" : "active")}
+                                onChange={(e) => handleToggleAvailability(m, e.target.value)}
+                                className={`text-[11px] font-semibold rounded-lg px-2 py-1 border focus:outline-none transition-colors cursor-pointer ${
+                                  (m.availability_status === "away" || m.is_available === false)
+                                    ? "bg-amber-950/50 text-amber-300 border-amber-800"
+                                    : m.availability_status === "leave"
+                                    ? "bg-blue-950/50 text-blue-300 border-blue-800"
+                                    : "bg-emerald-950/50 text-emerald-300 border-emerald-800"
+                                }`}
+                                title="Admin controlled: changes whether this technician receives auto-assigned tickets"
+                              >
+                                <option value="active">● Available (Duty)</option>
+                                <option value="away">⏸ On Break / Away</option>
+                                <option value="leave">🏖 On Official Leave</option>
+                              </select>
+                            </div>
+                          )
                         ) : (
                           <span className="flex items-center gap-1.5 text-emerald-400 text-[11px] font-medium">
                             <CheckCircle2 className="w-3.5 h-3.5" /> Active
