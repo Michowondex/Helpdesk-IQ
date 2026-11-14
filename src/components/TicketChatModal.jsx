@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { MessageSquare, Send, Shield, User, Clock, CheckCircle2, AlertCircle, X, Lock, Paperclip, Monitor, Globe, Cpu, Copy, Check, RefreshCw, Key, Share2, GitBranch, Pause } from "lucide-react";
 import { supabase } from "../supabase";
-import { calculateBusinessSla } from "../App";
+import { calculateBusinessSla } from "../engine/businessSla";
 
 export default function TicketChatModal({ ticket, currentUser, currentUserProfile, orgConfig, teams = [], members = [], onClose, onTicketUpdated }) {
   const [messages, setMessages] = useState([]);
