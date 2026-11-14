@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Activity, Plus, RefreshCw, CheckCircle2, AlertTriangle, XCircle, Trash2, X, ChevronDown, ChevronUp, GitBranch, Zap, Clock, Globe } from "lucide-react";
+import { useState } from "react";
+import { Activity, Plus, RefreshCw, CheckCircle2, AlertTriangle, XCircle, Trash2, X, ChevronDown, ChevronUp, GitBranch, Zap, Clock, Globe, ShieldAlert } from "lucide-react";
 import { pingEndpoint } from "../engine/healthPingEngine";
 import { supabase } from "../supabase";
 
@@ -18,22 +18,42 @@ const STARTER_ENDPOINTS = [
     health_url: "https://httpbin.org/status/200",
     responsible_team: "Application Support",
     check_interval_seconds: 60,
+    health_alert_threshold: 70,
   },
   {
     name: "Core Authentication API",
     health_url: "https://api.github.com",
     responsible_team: "Security Team",
     check_interval_seconds: 60,
+    health_alert_threshold: 70,
   },
   {
     name: "Payment Gateway Health",
     health_url: "https://cloudflare-dns.com/dns-query",
     responsible_team: "Backend Team",
     check_interval_seconds: 60,
+    health_alert_threshold: 70,
   }
 ];
 
-export default function MonitoredServices({ services = [], teams = [], userRole = "user", onAddService, onDeleteService, onRefreshHealth, onServiceOutage }) {
+// Checks if a ping result should trigger escalation based on the service threshold
+const shouldEscalate = (svc, pingResult) => {
+  const threshold = svc.health_alert_threshold ?? 70;
+  if (pingResult.status === "DOWN") return true;
+  if ((pingResult.health_pct ?? 100) < threshold) return true;
+  return false;
+};
+
+export default function MonitoredServices({
+  services = [],
+  teams = [],
+  userRole = "user",
+  onAddService,
+  onDeleteService,
+  onRefreshHealth,       // kept for compatibility — only called if services list itself changed
+  onServiceOutage,
+  onServiceHealthUpdate, // NEW: (svcId, updatedFields) => void — patch one service in-place in parent
+}) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [pingingId, setPingingId] = useState(null);
@@ -44,6 +64,7 @@ export default function MonitoredServices({ services = [], teams = [], userRole 
     name: "",
     health_url: "",
     check_interval_seconds: 60,
+    health_alert_threshold: 70, // NEW: default escalation threshold
   });
 
   const [routingRules, setRoutingRules] = useState({
@@ -63,88 +84,132 @@ export default function MonitoredServices({ services = [], teams = [], userRole 
     return `${Math.floor(d / 3600000)}h ago`;
   };
 
-  // Perform live ping on all services using server-side Edge Function (fallback to client-side)
+  // ── Applies ping result to a service: updates DB + parent state in-place ─────
+  // Does NOT call loadData() — that was the bug causing all services to disappear.
+  const applyPingResult = async (svc, pingResult) => {
+    const updatedFields = {
+      status: pingResult.status,
+      health_pct: pingResult.health_pct,
+      latency_ms: pingResult.latency,
+      last_checked_at: pingResult.checked_at,
+    };
+
+    // 1. Persist to database (non-blocking, best-effort)
+    if (svc.id) {
+      try {
+        await supabase.from("monitored_services").update(updatedFields).eq("id", svc.id);
+      } catch (e) {
+        console.warn("Health ping DB update error:", e);
+      }
+    }
+
+    // 2. Update parent state in-place via callback — SAFE, no full loadData needed
+    if (onServiceHealthUpdate) {
+      onServiceHealthUpdate(svc.id || svc.name, updatedFields);
+    }
+
+    // 3. Fire escalation if threshold breached
+    if (shouldEscalate(svc, pingResult) && onServiceOutage) {
+      // Only escalate on status transition (was not already down/degraded)
+      const prevHealth = svc.health_pct ?? 100;
+      const prevStatus = svc.status;
+      const threshold = svc.health_alert_threshold ?? 70;
+      const nowBelowThreshold = (pingResult.health_pct ?? 100) < threshold;
+      const wasAboveThreshold = prevHealth >= threshold && prevStatus !== "DOWN";
+
+      if (pingResult.status === "DOWN" && prevStatus !== "DOWN") {
+        onServiceOutage(svc, pingResult, "DOWN");
+      } else if (nowBelowThreshold && wasAboveThreshold) {
+        onServiceOutage(svc, pingResult, "THRESHOLD");
+      }
+    }
+  };
+
+  // ── Ping ALL services — fixed: no longer calls loadData ─────────────────────
   const handleRefreshAll = async () => {
     setRefreshing(true);
     try {
-      // 1. Try authentic server-side edge function probe first
+      // Try server-side edge function first (if deployed)
       const { data, error } = await supabase.functions.invoke("check-services", {
         body: { orgId: services[0]?.org_id || null }
       });
 
       if (!error && data?.success) {
-        if (onRefreshHealth) await onRefreshHealth();
+        // Edge function handled DB updates server-side — just re-fetch services specifically
+        // Using a targeted select instead of full loadData to avoid wiping state
+        const orgId = services[0]?.org_id;
+        if (orgId) {
+          const { data: freshSvcs } = await supabase
+            .from("monitored_services")
+            .select("*")
+            .eq("org_id", orgId);
+          if (freshSvcs && freshSvcs.length > 0 && onServiceHealthUpdate) {
+            freshSvcs.forEach(s => onServiceHealthUpdate(s.id, s));
+          } else if (freshSvcs && freshSvcs.length > 0 && onRefreshHealth) {
+            await onRefreshHealth();
+          }
+        }
         setRefreshing(false);
         return;
       }
     } catch (_) {
-      // Fallback below
+      // Fall through to client-side pings
     }
 
-    // 2. Client-side fallback probe
+    // Client-side fallback: ping each service and update in-place
     for (const svc of services) {
-      if (svc.health_url) {
+      if (!svc.health_url) continue;
+      try {
         const pingResult = await pingEndpoint(svc.health_url);
-        if (svc.id) {
-          try {
-            await supabase.from("monitored_services").update({
-              status: pingResult.status,
-              health_pct: pingResult.health_pct,
-              latency_ms: pingResult.latency,
-              last_checked_at: pingResult.checked_at
-            }).eq("id", svc.id);
-
-            if (pingResult.status === "DOWN" && svc.status !== "DOWN" && onServiceOutage) {
-              onServiceOutage(svc, pingResult);
-            }
-          } catch (e) {
-            console.warn("Update health ping error:", e);
-          }
-        }
+        await applyPingResult(svc, pingResult);
+      } catch (e) {
+        console.warn("Ping error for", svc.name, e);
       }
     }
-    if (onRefreshHealth) await onRefreshHealth();
+
     setRefreshing(false);
   };
 
-  // Single service ping
+  // ── Ping a SINGLE service — fixed: no longer calls loadData ─────────────────
   const handlePingSingle = async (svc) => {
     if (!svc.health_url) return;
     setPingingId(svc.id || svc.name);
 
     try {
+      // Try edge function scoped to this service
       const { data, error } = await supabase.functions.invoke("check-services", {
-        body: { orgId: svc.org_id || null }
+        body: { orgId: svc.org_id || null, serviceId: svc.id }
       });
+
       if (!error && data?.success) {
-        if (onRefreshHealth) await onRefreshHealth();
+        // Re-fetch just this service from DB
+        if (svc.id) {
+          const { data: freshSvc } = await supabase
+            .from("monitored_services")
+            .select("*")
+            .eq("id", svc.id)
+            .maybeSingle();
+          if (freshSvc && onServiceHealthUpdate) {
+            onServiceHealthUpdate(freshSvc.id, freshSvc);
+          }
+        }
         setPingingId(null);
         return;
       }
     } catch (_) {}
 
-    const pingResult = await pingEndpoint(svc.health_url);
-    if (svc.id) {
-      try {
-        await supabase.from("monitored_services").update({
-          status: pingResult.status,
-          health_pct: pingResult.health_pct,
-          latency_ms: pingResult.latency,
-          last_checked_at: pingResult.checked_at
-        }).eq("id", svc.id);
-
-        if (pingResult.status === "DOWN" && svc.status !== "DOWN" && onServiceOutage) {
-          onServiceOutage(svc, pingResult);
-        }
-      } catch (e) {
-        console.warn("Single ping update error:", e);
-      }
+    // Client-side fallback
+    try {
+      const pingResult = await pingEndpoint(svc.health_url);
+      await applyPingResult(svc, pingResult);
+    } catch (e) {
+      console.warn("Single ping error:", e);
     }
-    if (onRefreshHealth) await onRefreshHealth();
+
     setPingingId(null);
   };
 
-  // Seed sample endpoints if database is empty
+  // ── Seed sample endpoints ────────────────────────────────────────────────────
   const handleSeedStarters = async () => {
     setSeeding(true);
     for (const starter of STARTER_ENDPOINTS) {
@@ -162,6 +227,7 @@ export default function MonitoredServices({ services = [], teams = [], userRole 
     setSeeding(false);
   };
 
+  // ── Add new monitored service ────────────────────────────────────────────────
   const handleAddSubmit = async (e) => {
     e.preventDefault();
     if (!form.name.trim()) return;
@@ -172,7 +238,6 @@ export default function MonitoredServices({ services = [], teams = [], userRole 
     const defaultTeamId = rules.default || Object.values(rules)[0] || null;
     const defaultTeamObj = teams.find(t => t.id === defaultTeamId);
 
-    // Initial ping on add
     const ping = await pingEndpoint(form.health_url.trim());
 
     if (onAddService) {
@@ -180,6 +245,7 @@ export default function MonitoredServices({ services = [], teams = [], userRole 
         name: form.name.trim(),
         health_url: form.health_url.trim() || null,
         check_interval_seconds: Number(form.check_interval_seconds) || 60,
+        health_alert_threshold: Number(form.health_alert_threshold) || 70,
         routing_rules: Object.keys(rules).length > 0 ? rules : null,
         responsible_team: defaultTeamObj?.team_name || "General IT",
         health_pct: ping.health_pct,
@@ -189,7 +255,7 @@ export default function MonitoredServices({ services = [], teams = [], userRole 
       });
     }
 
-    setForm({ name: "", health_url: "", check_interval_seconds: 60 });
+    setForm({ name: "", health_url: "", check_interval_seconds: 60, health_alert_threshold: 70 });
     setRoutingRules({ connection_refused: "", http_5xx: "", body_db_keyword: "", slow_response: "", http_4xx: "", default: "" });
     setShowRouting(false);
     setShowAddModal(false);
@@ -232,9 +298,12 @@ export default function MonitoredServices({ services = [], teams = [], userRole 
       {/* Services Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {services.map((svc, i) => {
-          const isHealthy = svc.status === "OPERATIONAL" || (!svc.status && (svc.health_pct || svc.health) >= 90);
-          const isDegraded = svc.status === "DEGRADED" || (!svc.status && (svc.health_pct || svc.health) < 90 && (svc.health_pct || svc.health) >= 50);
-          const isDown = svc.status === "DOWN" || (!svc.status && (svc.health_pct || svc.health) < 50);
+          const healthPct = svc.health_pct ?? svc.health ?? 100;
+          const threshold = svc.health_alert_threshold ?? 70;
+          const isHealthy = svc.status === "OPERATIONAL" || (!svc.status && healthPct >= 90);
+          const isDegraded = svc.status === "DEGRADED" || (!svc.status && healthPct < 90 && healthPct >= 50);
+          const isDown = svc.status === "DOWN" || (!svc.status && healthPct < 50);
+          const isBelowThreshold = healthPct < threshold && !isDown;
           const hasRouting = svc.routing_rules && Object.keys(svc.routing_rules).length > 0;
           const isPinging = pingingId === (svc.id || svc.name);
 
@@ -244,8 +313,10 @@ export default function MonitoredServices({ services = [], teams = [], userRole 
               className={`bg-slate-900 border rounded-xl p-4 shadow-sm flex flex-col justify-between transition-all ${
                 isDown
                   ? "border-rose-500/50 bg-rose-950/10"
+                  : isBelowThreshold
+                  ? "border-amber-500/60 bg-amber-950/10"
                   : isDegraded
-                  ? "border-amber-500/50 bg-amber-950/10"
+                  ? "border-amber-500/40 bg-amber-950/5"
                   : "border-slate-800 hover:border-slate-700"
               }`}
             >
@@ -254,21 +325,22 @@ export default function MonitoredServices({ services = [], teams = [], userRole 
                   <h3 className="text-sm font-semibold text-slate-100 truncate pr-2">{svc.name}</h3>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border ${
-                      isHealthy
+                      isHealthy && !isBelowThreshold
                         ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                        : isBelowThreshold
+                        ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
                         : isDegraded
                         ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
                         : "bg-rose-500/10 text-rose-400 border-rose-500/20"
                     }`}
                   >
-                    {isHealthy ? <CheckCircle2 className="w-3 h-3" /> : isDegraded ? <AlertTriangle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-                    {svc.status || (isHealthy ? "OPERATIONAL" : "DEGRADED")}
+                    {isDown ? <XCircle className="w-3 h-3" /> : (isBelowThreshold || isDegraded) ? <AlertTriangle className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
+                    {svc.status || (isDown ? "DOWN" : isBelowThreshold ? "DEGRADED" : "OPERATIONAL")}
                   </span>
                 </div>
 
                 <div className="text-xs text-slate-400 mb-2 flex items-center justify-between">
                   <span>Team: <strong className="text-slate-300">{svc.responsible_team || "General IT"}</strong></span>
-                  {/* Real Live Latency Badge */}
                   <span className={`text-[11px] font-mono font-semibold flex items-center gap-1 ${
                     (svc.latency_ms || 45) < 300
                       ? "text-emerald-400"
@@ -288,6 +360,23 @@ export default function MonitoredServices({ services = [], teams = [], userRole 
                       </span>
                     ) : null}
                   </span>
+                </div>
+
+                {/* Escalation Threshold Badge */}
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  <span className={`text-[10px] flex items-center gap-1 px-1.5 py-0.5 rounded border font-medium ${
+                    isBelowThreshold
+                      ? "bg-amber-500/15 text-amber-400 border-amber-500/30 animate-pulse"
+                      : "bg-slate-800/80 text-slate-500 border-slate-700/50"
+                  }`}>
+                    <ShieldAlert className="w-3 h-3" />
+                    Alert if &lt; {threshold}% health
+                  </span>
+                  {isBelowThreshold && (
+                    <span className="text-[10px] text-amber-400 font-semibold animate-pulse">
+                      ⚠️ Below threshold!
+                    </span>
+                  )}
                 </div>
 
                 {hasRouting && (
@@ -313,15 +402,26 @@ export default function MonitoredServices({ services = [], teams = [], userRole 
                     <Clock className="w-3 h-3" />
                     {timeAgo(svc.last_checked_at)}
                   </span>
-                  <span className="font-semibold text-slate-200">{svc.health_pct ?? svc.health ?? 100}% Health</span>
+                  <span className={`font-semibold ${
+                    isBelowThreshold ? "text-amber-400" : isDown ? "text-rose-400" : "text-slate-200"
+                  }`}>{healthPct}% Health</span>
                 </div>
 
                 <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden mb-3">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${
-                      isHealthy ? "bg-emerald-500" : isDegraded ? "bg-amber-500" : "bg-rose-500"
+                      isDown ? "bg-rose-500" : isBelowThreshold ? "bg-amber-500" : isDegraded ? "bg-amber-500" : "bg-emerald-500"
                     }`}
-                    style={{ width: `${svc.health_pct ?? svc.health ?? 100}%` }}
+                    style={{ width: `${healthPct}%` }}
+                  />
+                </div>
+
+                {/* Threshold progress line */}
+                <div className="relative w-full h-0 mb-2">
+                  <div
+                    className="absolute top-[-10px] w-px h-3 bg-slate-500 opacity-60"
+                    style={{ left: `${threshold}%` }}
+                    title={`Escalation threshold: ${threshold}%`}
                   />
                 </div>
 
@@ -353,7 +453,7 @@ export default function MonitoredServices({ services = [], teams = [], userRole 
         })}
       </div>
 
-      {/* Empty State with Sample Seeding */}
+      {/* Empty State */}
       {services.length === 0 && (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center max-w-md mx-auto space-y-4">
           <div className="w-12 h-12 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto">
@@ -391,7 +491,7 @@ export default function MonitoredServices({ services = [], teams = [], userRole 
         </div>
       )}
 
-      {/* Add Modal */}
+      {/* Add Monitored Service Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl max-w-lg w-full overflow-hidden max-h-[90vh] overflow-y-auto">
@@ -427,7 +527,35 @@ export default function MonitoredServices({ services = [], teams = [], userRole 
                 <p className="text-[11px] text-slate-500 mt-1">BizaDesk pings this URL to measure real response times and uptime.</p>
               </div>
 
-              {/* Routing Rules Toggle */}
+              {/* Health Alert Threshold — NEW */}
+              <div className="bg-slate-950/80 border border-amber-500/20 rounded-xl p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+                  <label className="text-xs font-semibold text-amber-300">Escalation Alert Threshold</label>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Auto-trigger an incident and alert the team when this service's health drops below the selected percentage, even if it isn't fully down.
+                </p>
+                <div className="flex items-center gap-3">
+                  <select
+                    value={form.health_alert_threshold}
+                    onChange={e => setForm({ ...form, health_alert_threshold: Number(e.target.value) })}
+                    className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-amber-500 focus:outline-none"
+                  >
+                    <option value={90}>Alert if below 90% health (Strict)</option>
+                    <option value={80}>Alert if below 80% health (High)</option>
+                    <option value={70}>Alert if below 70% health (Recommended)</option>
+                    <option value={60}>Alert if below 60% health (Moderate)</option>
+                    <option value={50}>Alert if below 50% health (Lenient)</option>
+                    <option value={0}>Only alert when fully DOWN (0%)</option>
+                  </select>
+                  <span className="text-xs text-amber-400 font-bold shrink-0 w-16 text-center">
+                    &lt; {form.health_alert_threshold}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Routing Rules */}
               <div className="border border-slate-700 rounded-xl overflow-hidden">
                 <button
                   type="button"

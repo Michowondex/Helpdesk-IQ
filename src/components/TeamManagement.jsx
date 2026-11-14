@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Users, Plus, Trash2, Mail, Webhook, Star, StarOff, Edit3, Check, X, Shield } from "lucide-react";
 import { supabase } from "../supabase";
 

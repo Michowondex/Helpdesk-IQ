@@ -1323,28 +1323,54 @@ export default function HelpdeskAI() {
 
         try {
           const ping = await pingEndpoint(svc.health_url);
+          const threshold = svc.health_alert_threshold ?? 70;
+          const healthPct = ping.health_pct ?? 100;
+          const isDown = ping.status === "DOWN";
+          const isBelowThreshold = healthPct < threshold;
+          const prevHealthPct = svc.health_pct ?? 100;
+          const wasAboveThreshold = prevHealthPct >= threshold && svc.status !== "DOWN";
 
-          if (ping.status === "DOWN" && svc.status !== "DOWN") {
-            await supabase.from("monitored_services").update({
-              status: "DOWN",
-              health_pct: 0,
-              latency_ms: ping.latency,
-              last_checked_at: ping.checked_at
-            }).eq("id", svc.id);
+          // Always update DB and local state with latest ping result
+          const updatedFields = {
+            status: isDown ? "DOWN" : isBelowThreshold ? "DEGRADED" : "OPERATIONAL",
+            health_pct: healthPct,
+            latency_ms: ping.latency,
+            last_checked_at: ping.checked_at,
+          };
 
+          if (svc.id) {
+            await supabase.from("monitored_services").update(updatedFields).eq("id", svc.id);
+          }
+          // Patch local state without triggering loadData
+          setServices(prev => prev.map(s => s.id === svc.id ? { ...s, ...updatedFields } : s));
+
+          // Guard: no duplicate open incidents for same service
+          const openExisting = incidents.find(inc => inc.app === svc.name && !inc.resolved);
+          if (openExisting) continue;
+
+          if (isDown && svc.status !== "DOWN") {
+            // Full outage escalation
             const failureType = ping.error?.includes("Timeout") ? "slow_response" : "connection_refused";
             const targetTeamObj = resolveTeamForFailure(failureType, svc.routing_rules);
-
-            const openExisting = incidents.find(inc => inc.app === svc.name && !inc.resolved);
-            if (!openExisting) {
-              await triggerIncident({
-                title: `Automated Outage: ${svc.name} Unreachable`,
-                severity: "CRITICAL",
-                app: svc.name,
-                team: targetTeamObj.team_name,
-                desc: `Autonomous Health Monitor detected that ${svc.name} (${svc.health_url}) is DOWN. Latency: ${ping.latency}ms. Diagnosis: ${ping.error || "Connection refused / Host unreachable."}`
-              });
-            }
+            const teamName = targetTeamObj?.team_name || targetTeamObj || "IT Helpdesk";
+            await triggerIncident({
+              title: `Automated Outage: ${svc.name} Unreachable`,
+              severity: "CRITICAL",
+              app: svc.name,
+              team: teamName,
+              desc: `Autonomous Health Monitor detected that ${svc.name} (${svc.health_url}) is DOWN. Latency: ${ping.latency}ms. Diagnosis: ${ping.error || "Connection refused / Host unreachable."}`
+            });
+          } else if (isBelowThreshold && wasAboveThreshold) {
+            // Threshold breach escalation (degraded but not fully down)
+            const targetTeamObj = resolveTeamForFailure("slow_response", svc.routing_rules);
+            const teamName = targetTeamObj?.team_name || targetTeamObj || "IT Helpdesk";
+            await triggerIncident({
+              title: `Degraded Service: ${svc.name} below ${threshold}% health`,
+              severity: "HIGH",
+              app: svc.name,
+              team: teamName,
+              desc: `Health Monitor detected ${svc.name} has dropped to ${healthPct}% health — below the configured ${threshold}% alert threshold. Latency: ${ping.latency}ms. Investigating degradation, alerting ${teamName}.`
+            });
           }
         } catch (err) {
           console.warn("Background monitor check error:", err);
@@ -3159,15 +3185,34 @@ export default function HelpdeskAI() {
               setServices(prev => prev.filter(s => s.name !== svc.name));
             }}
             onRefreshHealth={loadData}
-            onServiceOutage={async (svc, pingRes) => {
-              const targetTeam = resolveTeamForFailure(svc.name, pingRes?.error || "Endpoint health ping failed");
-              await triggerIncident({
-                title: `Service Outage: ${svc.name}`,
-                app: svc.name,
-                severity: "CRITICAL",
-                team: targetTeam,
-                desc: `Automated health monitor detected HTTP ${pingRes?.status || "ERR"} (${pingRes?.latency || 0}ms latency). Error: ${pingRes?.error || "Health check timed out or refused connection"}. Auto-escalating to ${targetTeam}.`
-              });
+            onServiceHealthUpdate={(svcIdOrName, updatedFields) => {
+              // Patch a single service in-place — SAFE, never wipes the full list
+              setServices(prev => prev.map(s =>
+                (s.id === svcIdOrName || s.name === svcIdOrName)
+                  ? { ...s, ...updatedFields }
+                  : s
+              ));
+            }}
+            onServiceOutage={async (svc, pingRes, reason) => {
+              const targetTeamObj = resolveTeamForFailure(
+                pingRes?.error || "ping_failed",
+                svc.routing_rules
+              );
+              const teamName = targetTeamObj?.team_name || targetTeamObj || "IT Helpdesk";
+              const threshold = svc.health_alert_threshold ?? 70;
+              const isThresholdBreach = reason === "THRESHOLD";
+              const severity = isThresholdBreach ? "HIGH" : "CRITICAL";
+              const title = isThresholdBreach
+                ? `Degraded Service: ${svc.name} below ${threshold}% health`
+                : `Service Outage: ${svc.name} is DOWN`;
+              const desc = isThresholdBreach
+                ? `Health monitor detected ${svc.name} has dropped to ${pingRes?.health_pct ?? "?"}% health, below the configured ${threshold}% alert threshold. Latency: ${pingRes?.latency || 0}ms. Auto-escalating to ${teamName}.`
+                : `Health monitor detected ${svc.name} (${svc.health_url}) is fully unreachable. HTTP ${pingRes?.status || "ERR"}, latency: ${pingRes?.latency || 0}ms. Error: ${pingRes?.error || "Connection refused"}. Auto-escalating to ${teamName}.`;
+              // Guard: don't create duplicate incidents for the same service
+              const openExisting = incidents.find(inc => inc.app === svc.name && !inc.resolved);
+              if (!openExisting) {
+                await triggerIncident({ title, app: svc.name, severity, team: teamName, desc });
+              }
             }}
           />
         )}
