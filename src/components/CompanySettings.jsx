@@ -100,35 +100,29 @@ export default function CompanySettings({
         let { error: unenrollErr } = await supabase.auth.mfa.unenroll({ factorId: targetFactor.id });
 
         if (unenrollErr) {
-          // If unenroll requires AAL2 elevation, challenge and prompt user for their 6-digit code
-          console.warn("Direct unenroll notice, issuing challenge:", unenrollErr.message);
-          const { data: challengeData, error: challengeErr } = await supabase.auth.mfa.challenge({ factorId: targetFactor.id });
-          if (!challengeErr && challengeData?.id) {
-            const code = window.prompt("To authorize removing 2FA, please enter the 6-digit code currently shown on your Microsoft/Google Authenticator app:");
-            if (!code || !code.trim()) {
-              alert("Unenroll cancelled: 6-digit security code was not provided.");
-              setDisablingMfa(false);
-              return;
-            }
-            const { error: verifyErr } = await supabase.auth.mfa.verify({
-              factorId: targetFactor.id,
-              challengeId: challengeData.id,
-              code: code.trim()
-            });
-            if (verifyErr) {
-              alert("Verification failed: " + verifyErr.message);
-              setDisablingMfa(false);
-              return;
-            }
-            // Session is now AAL2 verified; unenroll factor
-            const { error: retryErr } = await supabase.auth.mfa.unenroll({ factorId: targetFactor.id });
-            if (retryErr) {
-              alert("Could not remove 2FA: " + retryErr.message);
-              setDisablingMfa(false);
-              return;
-            }
-          } else {
-            alert("Could not remove 2FA: " + unenrollErr.message);
+          // If unenroll requires AAL2 elevation, prompt user for their 6-digit code
+          console.warn("Direct unenroll requires AAL2 elevation, prompting code:", unenrollErr.message);
+          const code = window.prompt("To authorize removing 2FA, please enter the 6-digit code currently shown on your Microsoft/Google Authenticator app:");
+          if (!code || !code.trim()) {
+            alert("Unenroll cancelled: 6-digit security code was not provided.");
+            setDisablingMfa(false);
+            return;
+          }
+
+          const { error: verifyErr } = await supabase.auth.mfa.challengeAndVerify({
+            factorId: targetFactor.id,
+            code: code.trim()
+          });
+          if (verifyErr) {
+            alert("Verification failed: " + verifyErr.message);
+            setDisablingMfa(false);
+            return;
+          }
+
+          // Session is now elevated to AAL2; unenroll the factor
+          const { error: retryErr } = await supabase.auth.mfa.unenroll({ factorId: targetFactor.id });
+          if (retryErr) {
+            alert("Could not remove 2FA: " + retryErr.message);
             setDisablingMfa(false);
             return;
           }
