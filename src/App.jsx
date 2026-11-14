@@ -326,6 +326,7 @@ export default function HelpdeskAI() {
 
   // Modals
   const [newTicket, setNewTicket] = useState(false);
+  const [submittingTicket, setSubmittingTicket] = useState(false);
   const [ticketForm, setTicketForm] = useState({ 
     title: "", 
     ticket_type: "Network Issue", 
@@ -1697,15 +1698,23 @@ export default function HelpdeskAI() {
   };
 
   const submitTicket = async (customTicketData) => {
-    const id = `TKT-${String(100 + tickets.length + 1)}`;
-    const teamMap = {
-      "Network Issue": "Network Team",
-      "Software Issue": "Application Support",
-      "Database Issue": "Database Team",
-      "Access Request": "Security Team",
-      "Hardware Request": "Infrastructure Team",
-      "Other": "IT Support"
-    };
+    const rawTitle = customTicketData?.title || ticketForm.title;
+    if (!rawTitle || !rawTitle.trim()) {
+      showBanner("Please enter an issue title before submitting.", "#ef4444");
+      return;
+    }
+
+    setSubmittingTicket(true);
+    try {
+      const id = `TKT-${String(100 + tickets.length + 1)}`;
+      const teamMap = {
+        "Network Issue": "Network Team",
+        "Software Issue": "Application Support",
+        "Database Issue": "Database Team",
+        "Access Request": "Security Team",
+        "Hardware Request": "Infrastructure Team",
+        "Other": "IT Support"
+      };
 
     // Fallback team: 1. Defined is_default team, 2. "IT Helpdesk", 3. First team in organization
     const defaultOrgTeam = teams.find(t => t.is_default)?.team_name || "IT Helpdesk";
@@ -1815,7 +1824,7 @@ export default function HelpdeskAI() {
       type: "ticket",
       ticket_id: id,
       title: `Ticket ${id} Routed & Assigned`,
-      message: `"${t.title}" assigned to ${assignedTechName} (${chosenTeam}) with ${t.priority} priority.`,
+      message: `"${t.title}" assigned to ${assignedTechName} (${effectiveTeam}) with ${t.priority} priority.`,
       time: Date.now(),
       read: false,
       assigned_to: assignedTechName
@@ -1871,10 +1880,16 @@ export default function HelpdeskAI() {
       assigned_to: "auto"
     });
 
-    showBanner(`🎫 Ticket ${id} Routed to ${assignedTechName} (${chosenTeam})`, "#6366f1");
+    showBanner(`🎫 Ticket ${id} Routed to ${assignedTechName} (${effectiveTeam})`, "#6366f1");
     loadData();
     return t;
-  };
+  } catch (err) {
+    console.error("submitTicket error:", err);
+    showBanner(`Could not submit ticket: ${err.message}`, "#ef4444");
+  } finally {
+    setSubmittingTicket(false);
+  }
+};
 
   // Status changer for tickets (OPEN -> IN_PROGRESS -> RESOLVED)
   const updateTicketStatus = async (t, newStatus) => {
@@ -3894,10 +3909,23 @@ export default function HelpdeskAI() {
                   Cancel
                 </button>
                 <button
+                  type="button"
+                  disabled={submittingTicket}
                   onClick={() => submitTicket()}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs py-2 rounded-lg shadow-lg shadow-indigo-950"
+                  className={`flex-1 font-medium text-xs py-2 rounded-lg shadow-lg shadow-indigo-950 transition-all flex items-center justify-center gap-2 ${
+                    submittingTicket
+                      ? "bg-indigo-700/60 text-indigo-300 cursor-not-allowed"
+                      : "bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer"
+                  }`}
                 >
-                  Submit Ticket
+                  {submittingTicket ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Submitting...</span>
+                    </>
+                  ) : (
+                    "Submit Ticket"
+                  )}
                 </button>
               </div>
             </div>
