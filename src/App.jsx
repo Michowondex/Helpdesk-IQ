@@ -4,9 +4,10 @@ import {
   Plus, CheckCircle2, RefreshCw, Trash2, Clock, ShieldAlert,
   ChevronRight, Building2, Flame, HelpCircle, LogOut, User, Users,
   Monitor, Cpu, Globe, Sparkles, MessageSquare, KeyRound, X, Eye, EyeOff,
-  Sun, Moon, Scale, ShieldCheck, MapPin, Phone
+  Sun, Moon, Scale, ShieldCheck, MapPin, Phone, GitBranch, Shield
 } from "lucide-react";
 import { supabase } from "./supabase";
+import { pingEndpoint } from "./engine/healthPingEngine";
 import VirtualITSupport from "./components/VirtualITSupport";
 import ProactiveBanner from "./components/ProactiveBanner";
 import AuthScreen from "./components/AuthScreen";
@@ -100,6 +101,55 @@ function EmailModal({ email, onClose }) {
         <div className="mt-4 text-[11px] text-slate-500 text-right">
           Sent at {fmtTime(email.sent_at)}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Live SLA Progress Bar for Tickets ─────────────────────────────────────────
+function TicketSlaBar({ ticket, slaHours = 1 }) {
+  const isResolved = ticket.status === "RESOLVED";
+  if (isResolved) {
+    const totalMins = Math.max(1, Math.round(((ticket.resolved_at || ticket.created || Date.now()) - ticket.created) / 60000));
+    return (
+      <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-medium mt-2">
+        <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+        <span>Resolved in {totalMins}m {ticket.sla_breached ? "(SLA Breached)" : "(Within SLA ✓)"}</span>
+      </div>
+    );
+  }
+
+  const slaMs = slaHours * 3600000;
+  const elapsedMs = Math.max(0, Date.now() - (ticket.created || Date.now()));
+  const remainingMs = slaMs - elapsedMs;
+  const isBreached = remainingMs <= 0 || ticket.sla_breached;
+  const pctRemaining = Math.max(0, Math.min(100, Math.round((remainingMs / slaMs) * 100)));
+  const remainingMins = Math.abs(Math.round(remainingMs / 60000));
+
+  const barColor = isBreached
+    ? "bg-rose-500 animate-pulse"
+    : pctRemaining < 25
+    ? "bg-rose-500"
+    : pctRemaining < 50
+    ? "bg-amber-500"
+    : "bg-emerald-500";
+
+  return (
+    <div className="space-y-1 mt-2.5 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80">
+      <div className="flex items-center justify-between text-[11px]">
+        <span className={`font-semibold flex items-center gap-1.5 ${
+          isBreached ? "text-rose-400 animate-pulse" : pctRemaining < 25 ? "text-rose-400" : pctRemaining < 50 ? "text-amber-400" : "text-slate-300"
+        }`}>
+          <Clock className="w-3.5 h-3.5 shrink-0" />
+          {isBreached ? `🚨 SLA Breached by ${remainingMins}m` : `${remainingMins}m remaining before breach`}
+        </span>
+        <span className="text-[10px] text-slate-500 font-mono">SLA Target: {slaHours}h</span>
+      </div>
+      <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+          style={{ width: isBreached ? "100%" : `${pctRemaining}%` }}
+        />
       </div>
     </div>
   );
@@ -269,6 +319,17 @@ export default function HelpdeskAI() {
   const [activeChatTicket, setActiveChatTicket] = useState(null);
   const [settlementTicket, setSettlementTicket] = useState(null);
   const [showMandatoryMfaEnroll, setShowMandatoryMfaEnroll] = useState(false);
+
+  // RCA (Root Cause Analysis) resolution modal state
+  const [rcaModal, setRcaModal] = useState(null);
+  const [rcaForm, setRcaForm] = useState({ root_cause: "", resolution_actions: "", preventive_measure: "", affected_count: "" });
+  const [submittingRca, setSubmittingRca] = useState(false);
+
+  // Admin Ticket Re-Route modal state
+  const [rerouteModalTicket, setRerouteModalTicket] = useState(null);
+  const [cardRerouteTeam, setCardRerouteTeam] = useState("");
+  const [cardRerouteTechId, setCardRerouteTechId] = useState("auto");
+  const [savingCardReroute, setSavingCardReroute] = useState(false);
 
   // Tickets queue interactive filter states
   const [ticketStatusFilter, setTicketStatusFilter] = useState("ALL"); // 'ALL' | 'OPEN' | 'IN_PROGRESS' | 'RESOLVED'
@@ -987,7 +1048,7 @@ export default function HelpdeskAI() {
 
   // ── Smart Incident Routing ─────────────────────────────────────────────────
   // Given a failure type string, resolve the correct team from loaded teams
-  const _resolveTeamForFailure = (failureType, serviceRoutingRules) => {
+  const resolveTeamForFailure = (failureType, serviceRoutingRules) => {
     // 1. Check service-specific rules first
     if (serviceRoutingRules && serviceRoutingRules[failureType]) {
       const teamId = serviceRoutingRules[failureType];
@@ -1004,11 +1065,11 @@ export default function HelpdeskAI() {
     const defaultTeam = teams.find(t => t.is_default);
     if (defaultTeam) return defaultTeam;
     // 4. Fall back to first team
-    return teams[0] || { team_name: "IT Support", alert_email: orgConfig.support_email };
+    return teams[0] || { team_name: "IT Helpdesk", alert_email: orgConfig.support_email };
   };
 
   // Detect failure type from a health check error
-  const _detectFailureType = (error, statusCode, responseBody, responseTimeMs) => {
+  const detectFailureType = (error, statusCode, responseBody, responseTimeMs) => {
     if (!statusCode || error?.name === "TypeError") return "connection_refused";
     if (responseTimeMs > 3000) return "slow_response";
     if (statusCode >= 500) {
@@ -1058,9 +1119,14 @@ export default function HelpdeskAI() {
       team: inc.team,
       time_open: String(ageMins),
       time_detected: fmtTime(inc.opened_at || Date.now()),
-      resolved_by: inc.assignee || inc.team || "IT Operations",
+      resolved_by: inc.resolved_by || inc.assignee || inc.team || "IT Operations",
       company_name: orgConfig?.name || "Corporate",
       description: inc.description || "System anomaly detected.",
+      rca_summary: inc.rca_summary || inc.description || "Issue investigated and resolved.",
+      root_cause: inc.root_cause || "Not specified",
+      resolution_actions: inc.resolution_actions || "Systems verified and operating normally.",
+      preventive_measure: inc.preventive_measure || "Continuous telemetry monitoring active.",
+      resolution_note: inc.rca_summary || inc.description || "Issue has been resolved successfully.",
       portal_url: APP_URL
     };
 
@@ -1070,24 +1136,24 @@ export default function HelpdeskAI() {
 
     const bodyText = fillTemplate(rawTemplate, templateData);
 
-    const subjects = {
-      initial: `[${inc.severity}] Incident Alert: ${inc.title} — ${inc.app}`,
-      manager_escalation: `[TIER 2 ESCALATION] Unresolved ${inc.severity} Incident: ${inc.title}`,
-      allstaff: `[URGENT ALL-STAFF OUTAGE] ${inc.title} — ${inc.app}`,
-      followup: `[FOLLOW-UP] Still Open: ${inc.title} (${inc.id})`,
-      resolution: `[RESOLVED] ${inc.title} — ${inc.id}`
-    };
+    const subjectTemplate = orgConfig?.email_templates?.[emailType]?.subject || DEFAULT_INCIDENT_TEMPLATES[emailType]?.subject;
+    const finalSubject = subjectTemplate ? fillTemplate(subjectTemplate, templateData) : `[${inc.severity}] Incident Alert: ${inc.title} — ${inc.app}`;
+
+    const targetTeamRecord = teams.find(t => t.team_name.toLowerCase() === (inc.team || "").toLowerCase());
+    const teamAlertEmail = targetTeamRecord?.alert_email || orgConfig?.support_email || "helpdesk@bizadoc.com";
+    const supervisorEmail = orgConfig?.incident_manager_email || targetTeamRecord?.supervisor_email || orgConfig?.support_email || "helpdesk@bizadoc.com";
+    const allStaffEmail = orgConfig?.allstaff_email || "all-staff@company.com";
 
     const recipients = {
-      initial: `${inc.team.toLowerCase().replace(/ /g, "-")}@company.com`,
-      manager_escalation: orgConfig?.support_email || "helpdesk@bizadoc.com",
-      allstaff: orgConfig?.allstaff_email || "all-staff@company.com",
-      followup: `${inc.team.toLowerCase().replace(/ /g, "-")}@company.com`,
-      resolution: orgConfig?.allstaff_email || "all-staff@company.com"
+      initial: teamAlertEmail,
+      manager_escalation: supervisorEmail,
+      allstaff: allStaffEmail,
+      followup: teamAlertEmail,
+      resolution: allStaffEmail
     };
 
     const html = generateBrandedHtmlEmail({
-      title: subjects[emailType] || inc.title,
+      title: finalSubject,
       bodyText,
       badgeText: `${inc.severity} INCIDENT NOTIFICATION`,
       badgeColor: inc.severity === "CRITICAL" ? "#dc2626" : inc.severity === "HIGH" ? "#ea580c" : "#2563eb",
@@ -1106,7 +1172,7 @@ export default function HelpdeskAI() {
       inc_id: inc.id,
       email_type: emailType,
       to_address: recipients[emailType] || "helpdesk@bizadoc.com",
-      subject: subjects[emailType] || `[${inc.severity}] Incident ${inc.id}`,
+      subject: finalSubject,
       body: bodyText,
       html
     };
@@ -1225,7 +1291,20 @@ export default function HelpdeskAI() {
       for (const t of tickets) {
         if (t.status === "RESOLVED" || t.sla_breached) continue;
         if (Date.now() - t.created >= ticketThresholdMs) {
-          await supabase.from("tickets").update({ sla_breached: true }).eq("id", t.id);
+          await supabase.from("tickets").update({ 
+            sla_breached: true,
+            breached_at: Date.now()
+          }).eq("id", t.id);
+
+          try {
+            await supabase.from("session_audit_logs").insert({
+              org_id: t.org_id || orgConfig?.id,
+              user_name: t.assignee_name || "Unassigned",
+              action: "SLA_BREACHED",
+              details: `Ticket ${t.id} breached SLA (${orgConfig.ticket_sla_hours || 1}h target) in queue "${t.team}". Assigned technician: ${t.assignee_name}`
+            });
+          } catch (_) {}
+
           showBanner(`⚠️ SLA BREACHED — Ticket ${t.id} open over ${orgConfig.ticket_sla_hours || 1} hour(s)!`, "#f97316");
           loadData();
         }
@@ -1233,6 +1312,48 @@ export default function HelpdeskAI() {
     }, 30000);
     return () => clearInterval(check);
   }, [tickets, orgConfig]);
+
+  // ── Automated Background Service Health Monitor (Every 60 Seconds) ─────────
+  useEffect(() => {
+    if (!services || services.length === 0) return;
+
+    const monitorInterval = setInterval(async () => {
+      for (const svc of services) {
+        if (!svc.health_url) continue;
+
+        try {
+          const ping = await pingEndpoint(svc.health_url);
+
+          if (ping.status === "DOWN" && svc.status !== "DOWN") {
+            await supabase.from("monitored_services").update({
+              status: "DOWN",
+              health_pct: 0,
+              latency_ms: ping.latency,
+              last_checked_at: ping.checked_at
+            }).eq("id", svc.id);
+
+            const failureType = ping.error?.includes("Timeout") ? "slow_response" : "connection_refused";
+            const targetTeamObj = resolveTeamForFailure(failureType, svc.routing_rules);
+
+            const openExisting = incidents.find(inc => inc.app === svc.name && !inc.resolved);
+            if (!openExisting) {
+              await triggerIncident({
+                title: `Automated Outage: ${svc.name} Unreachable`,
+                severity: "CRITICAL",
+                app: svc.name,
+                team: targetTeamObj.team_name,
+                desc: `Autonomous Health Monitor detected that ${svc.name} (${svc.health_url}) is DOWN. Latency: ${ping.latency}ms. Diagnosis: ${ping.error || "Connection refused / Host unreachable."}`
+              });
+            }
+          }
+        } catch (err) {
+          console.warn("Background monitor check error:", err);
+        }
+      }
+    }, 60000);
+
+    return () => clearInterval(monitorInterval);
+  }, [services, incidents, teams]);
 
   const triggerIncident = async (formData) => {
     const id = `INC-${String(incidents.length + 1).padStart(3, "0")}`;
@@ -1278,12 +1399,75 @@ export default function HelpdeskAI() {
     loadData();
   };
 
-  const resolveIncident = async (inc) => {
-    await saveEmail(buildEmail(inc, "resolution"));
-    await supabase.from("incidents").update({ resolved: true, status: "RESOLVED", last_update: Date.now() }).eq("id", inc.id);
-    showBanner(`✅ ${inc.id} Resolved — All-staff notified`, "#22c55e");
-    setResolveModal(null);
-    loadData();
+  const resolveIncident = (inc) => {
+    setRcaModal(inc);
+    setRcaForm({
+      root_cause: inc.root_cause || "",
+      resolution_actions: inc.resolution_actions || "",
+      preventive_measure: inc.preventive_measure || "",
+      affected_count: inc.affected_count || ""
+    });
+  };
+
+  const handleConfirmRcaResolution = async (e) => {
+    if (e) e.preventDefault();
+    if (!rcaModal) return;
+    if (!rcaForm.root_cause.trim() || !rcaForm.resolution_actions.trim()) {
+      showBanner("Please provide Root Cause and Actions Taken to complete resolution.", "#ef4444");
+      return;
+    }
+
+    setSubmittingRca(true);
+    try {
+      const resolvedAt = Date.now();
+      const resolvedBy = currentUserProfile?.full_name || currentUser?.email || "IT Specialist";
+      const rcaSummary = `${rcaForm.root_cause.trim()}. Actions Taken: ${rcaForm.resolution_actions.trim()}`;
+
+      const resolvedInc = {
+        ...rcaModal,
+        resolved: true,
+        status: "RESOLVED",
+        resolved_at: resolvedAt,
+        resolved_by: resolvedBy,
+        rca_summary: rcaSummary,
+        root_cause: rcaForm.root_cause.trim(),
+        resolution_actions: rcaForm.resolution_actions.trim(),
+        preventive_measure: rcaForm.preventive_measure.trim() || null,
+        affected_count: Number(rcaForm.affected_count) || 0,
+        last_update: resolvedAt
+      };
+
+      await saveEmail(buildEmail(resolvedInc, "resolution"));
+      await supabase.from("incidents").update({
+        resolved: true,
+        status: "RESOLVED",
+        resolved_at: resolvedAt,
+        resolved_by: resolvedBy,
+        rca_summary: rcaSummary,
+        root_cause: rcaForm.root_cause.trim(),
+        resolution_actions: rcaForm.resolution_actions.trim(),
+        preventive_measure: rcaForm.preventive_measure.trim() || null,
+        affected_count: Number(rcaForm.affected_count) || 0,
+        last_update: resolvedAt
+      }).eq("id", rcaModal.id);
+
+      try {
+        await supabase.from("session_audit_logs").insert({
+          org_id: rcaModal.org_id || orgConfig?.id,
+          user_name: resolvedBy,
+          action: "INCIDENT_RESOLVED_RCA",
+          details: `Incident ${rcaModal.id} resolved with RCA by ${resolvedBy}. Cause: ${rcaForm.root_cause.trim()}`
+        });
+      } catch (_) {}
+
+      showBanner(`✅ ${rcaModal.id} Resolved with RCA — All-staff notified`, "#22c55e");
+      setRcaModal(null);
+      loadData();
+    } catch (err) {
+      showBanner(`Resolution error: ${err.message}`, "#ef4444");
+    } finally {
+      setSubmittingRca(false);
+    }
   };
 
   const sendFollowUp = async (inc) => {
@@ -1308,45 +1492,53 @@ export default function HelpdeskAI() {
     const defaultOrgTeam = teams.find(t => t.is_default)?.team_name || "IT Helpdesk";
 
     const chosenType = customTicketData?.ticket_type || ticketForm.ticket_type;
-    const chosenTeam = customTicketData?.team || ticketForm.team || teamMap[chosenType] || defaultOrgTeam;
+    const initialTeam = customTicketData?.team || ticketForm.team || teamMap[chosenType] || defaultOrgTeam;
     const chosenPriority = customTicketData?.priority || ticketForm.priority || "MEDIUM";
     const chosenAssigneeId = customTicketData?.assigned_to || ticketForm.assigned_to || "auto";
 
-    // Dynamic Technician Resolution
+    // Strictly pure active technicians (Admins are NEVER assigned tickets)
+    const pureTechs = members.filter(m => m.role === "technician" && m.is_active !== false);
+
+    let effectiveTeam = initialTeam;
     let assignedTechName = "Unassigned";
     let assignedTechId = null;
 
     if (chosenAssigneeId && chosenAssigneeId !== "auto") {
-      const foundTech = members.find(m => m.id === chosenAssigneeId);
+      const foundTech = pureTechs.find(m => m.id === chosenAssigneeId);
       if (foundTech) {
         assignedTechId = foundTech.id;
         assignedTechName = foundTech.full_name || foundTech.email;
       }
     } else {
-      // Smart Auto-Assign with Technician Availability & Anti-Dodge Check
-      // Filter technicians in department who are actively available (not on break / away / leave)
-      const availableTechs = members.filter(m => 
-        (m.role === "technician" || m.role === "admin") &&
-        (!m.department || m.department.toLowerCase() === chosenTeam.toLowerCase() || m.department === "General IT" || m.department === "IT Support") &&
+      // 1. Check technicians assigned to the selected team
+      const teamTechs = pureTechs.filter(m => 
+        m.department && m.department.toLowerCase() === initialTeam.toLowerCase()
+      );
+      const availableTeamTechs = teamTechs.filter(m => 
         m.is_available !== false && m.availability_status !== "away" && m.availability_status !== "leave"
       );
 
-      if (availableTechs.length > 0) {
-        const picked = availableTechs[tickets.length % availableTechs.length];
+      if (availableTeamTechs.length > 0) {
+        const picked = availableTeamTechs[tickets.length % availableTeamTechs.length];
         assignedTechId = picked.id;
         assignedTechName = picked.full_name || picked.email;
+        effectiveTeam = initialTeam;
       } else {
-        // Fallback: If all department technicians are away/on-leave, route to available technicians in Default Fallback Team
-        const fallbackTechs = members.filter(m => 
-          (m.role === "technician" || m.role === "admin") &&
+        // ⚡ FALLBACK QUEUE ROUTING: No technician in chosen team or all away!
+        effectiveTeam = defaultOrgTeam;
+        const fallbackTechs = pureTechs.filter(m => 
+          (!m.department || m.department.toLowerCase() === defaultOrgTeam.toLowerCase() || 
+           m.department.toLowerCase() === "it helpdesk" || m.department.toLowerCase() === "it support") &&
           m.is_available !== false && m.availability_status !== "away" && m.availability_status !== "leave"
         );
+
         if (fallbackTechs.length > 0) {
           const picked = fallbackTechs[tickets.length % fallbackTechs.length];
           assignedTechId = picked.id;
-          assignedTechName = `${picked.full_name || picked.email} (Fallback: ${defaultOrgTeam})`;
+          assignedTechName = picked.full_name || picked.email;
         } else {
-          assignedTechName = `Auto (${chosenTeam})`;
+          assignedTechId = null;
+          assignedTechName = `Unassigned (${defaultOrgTeam} Queue)`;
         }
       }
     }
@@ -1376,7 +1568,7 @@ export default function HelpdeskAI() {
       description: sanitizeInput(customTicketData?.desc || ticketForm.desc),
       submitter: sanitizeInput(customTicketData?.submitter || ticketForm.submitter || currentUserProfile?.full_name || currentUser?.email || "Staff Member"),
       status: "OPEN",
-      team: chosenTeam,
+      team: effectiveTeam,
       assigned_to: assignedTechId,
       assignee_name: assignedTechName,
       diagnostics: diagnostics,
@@ -1473,7 +1665,8 @@ export default function HelpdeskAI() {
 
       const updates = { status: newStatus };
       if (newStatus === "RESOLVED") {
-        updates.sla_breached = false;
+        updates.resolved_at = Date.now();
+        updates.resolved = true;
       }
 
       await supabase.from("tickets").update(updates).eq("id", t.id);
@@ -1539,6 +1732,80 @@ export default function HelpdeskAI() {
     } catch (err) {
       console.warn("Failed to update ticket status:", err);
       showBanner(`Error: ${err.message}`, "#ef4444");
+    }
+  };
+
+  const handleReRouteTicket = async (e) => {
+    if (e) e.preventDefault();
+    if (!rerouteModalTicket) return;
+    setSavingCardReroute(true);
+
+    try {
+      const targetTeam = cardRerouteTeam || rerouteModalTicket.team;
+      const pureTechs = members.filter(m => m.role === "technician" && m.is_active !== false);
+      let assignedTechId = null;
+      let assignedTechName = null;
+
+      if (cardRerouteTechId && cardRerouteTechId !== "auto") {
+        const picked = pureTechs.find(m => m.id === cardRerouteTechId);
+        if (picked) {
+          assignedTechId = picked.id;
+          assignedTechName = picked.full_name || picked.email;
+        }
+      } else {
+        const teamTechs = pureTechs.filter(m => 
+          (!m.department || m.department.toLowerCase() === targetTeam.toLowerCase() || m.department === "General IT" || m.department === "IT Support") &&
+          m.is_available !== false && m.availability_status !== "away" && m.availability_status !== "leave"
+        );
+        if (teamTechs.length > 0) {
+          const picked = teamTechs[Math.floor(Math.random() * teamTechs.length)];
+          assignedTechId = picked.id;
+          assignedTechName = picked.full_name || picked.email;
+        } else {
+          assignedTechId = null;
+          assignedTechName = `Unassigned (${targetTeam} Queue)`;
+        }
+      }
+
+      const updates = {
+        team: targetTeam,
+        assigned_to: assignedTechId,
+        assignee_name: assignedTechName
+      };
+
+      await supabase.from("tickets").update(updates).eq("id", rerouteModalTicket.id);
+
+      const adminName = currentUserProfile?.full_name || currentUser?.email || "Admin";
+      try {
+        await supabase.from("session_audit_logs").insert({
+          org_id: rerouteModalTicket.org_id || orgConfig?.id,
+          user_name: adminName,
+          action: `Re-routed Ticket ${rerouteModalTicket.id}`,
+          result: "SUCCESS",
+          details: `Transferred from ${rerouteModalTicket.team} to ${targetTeam} (Assigned: ${assignedTechName})`
+        });
+      } catch (_) {}
+
+      try {
+        await supabase.from("ticket_messages").insert({
+          ticket_id: rerouteModalTicket.id,
+          sender_id: currentUser?.id,
+          sender_name: adminName,
+          sender_role: "admin",
+          message: `🔄 Ticket re-routed from [${rerouteModalTicket.team}] to [${targetTeam}]. Assigned technician: ${assignedTechName}.`,
+          is_internal: true,
+          created_at: Date.now()
+        });
+      } catch (_) {}
+
+      showBanner(`Ticket re-routed to ${targetTeam} (${assignedTechName})`, "#22c55e");
+      setRerouteModalTicket(null);
+      loadData();
+    } catch (err) {
+      console.warn("Re-route failed:", err);
+      showBanner(`Failed to re-route ticket: ${err.message}`, "#ef4444");
+    } finally {
+      setSavingCardReroute(false);
     }
   };
 
@@ -2401,6 +2668,44 @@ export default function HelpdeskAI() {
                               {inc.description}
                             </p>
                           )}
+
+                          {/* Post-Incident Root Cause Analysis (RCA) Card */}
+                          {isResolved && (inc.rca_summary || inc.root_cause) && (
+                            <div className="mt-3 p-3.5 bg-slate-950/90 rounded-xl border border-emerald-500/30 text-xs space-y-2">
+                              <div className="flex items-center justify-between text-emerald-400 font-bold text-[11px] uppercase tracking-wider">
+                                <span className="flex items-center gap-1.5">
+                                  <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                                  Post-Incident Root Cause Analysis (RCA)
+                                </span>
+                                <span className="text-slate-400 text-[10px] font-normal">
+                                  Resolved by: <strong className="text-slate-200">{inc.resolved_by || "IT Specialist"}</strong> ({fmtTime(inc.resolved_at || inc.last_update)})
+                                </span>
+                              </div>
+                              <div className="space-y-1.5 text-slate-300">
+                                <div>
+                                  <span className="text-slate-500 font-semibold text-[10px] uppercase block">Root Cause:</span>
+                                  <p className="text-slate-200">{inc.root_cause || inc.rca_summary}</p>
+                                </div>
+                                {inc.resolution_actions && (
+                                  <div>
+                                    <span className="text-slate-500 font-semibold text-[10px] uppercase block">Actions Taken:</span>
+                                    <p className="text-slate-200">{inc.resolution_actions}</p>
+                                  </div>
+                                )}
+                                {inc.preventive_measure && (
+                                  <div>
+                                    <span className="text-slate-500 font-semibold text-[10px] uppercase block">Preventive Measures:</span>
+                                    <p className="text-emerald-300 font-medium">{inc.preventive_measure}</p>
+                                  </div>
+                                )}
+                                {inc.affected_count > 0 && (
+                                  <div className="text-[11px] text-slate-400">
+                                    Impact Scope: <strong className="text-amber-400 font-semibold">{inc.affected_count} users/services impacted</strong>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         {/* Incident Actions */}
@@ -2439,6 +2744,31 @@ export default function HelpdeskAI() {
 
         {/* TAB 3: TICKETS MANAGEMENT */}
         {tab === "tickets" && (() => {
+          // Calculate live MTTR (Mean Time To Resolve) metrics
+          const resolvedTickets = tickets.filter(t => t.status === "RESOLVED");
+          const avgTicketMttrMins = resolvedTickets.length > 0
+            ? Math.round(
+                resolvedTickets.reduce((acc, t) => {
+                  const resolvedTime = t.resolved_at || t.last_update || t.created || Date.now();
+                  return acc + Math.max(1, (resolvedTime - (t.created || resolvedTime)) / 60000);
+                }, 0) / resolvedTickets.length
+              )
+            : null;
+
+          const resolvedIncidents = incidents.filter(i => i.status === "RESOLVED");
+          const avgIncMttrMins = resolvedIncidents.length > 0
+            ? Math.round(
+                resolvedIncidents.reduce((acc, i) => {
+                  const resolvedTime = i.resolved_at || i.last_update || Date.now();
+                  const startTime = i.started_at || i.timestamp || resolvedTime;
+                  return acc + Math.max(1, (resolvedTime - startTime) / 60000);
+                }, 0) / resolvedIncidents.length
+              )
+            : null;
+
+          const breachedTicketsCount = tickets.filter(t => t.sla_breached).length;
+          const openTicketsCount = tickets.filter(t => t.status !== "RESOLVED").length;
+
           // Interactive Filtering by Status, Technician, and Date
           const displayedTickets = roleFilteredTickets.filter(t => {
             // 1. Status filter
@@ -2487,6 +2817,46 @@ export default function HelpdeskAI() {
                 </button>
               </div>
 
+              {/* Live MTTR & Performance Metrics Bar */}
+              {userRole !== "user" && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Ticket MTTR</span>
+                    <div className="flex items-baseline gap-1 mt-1">
+                      <span className="text-xl font-bold text-indigo-400">
+                        {avgTicketMttrMins !== null ? (avgTicketMttrMins > 60 ? `${(avgTicketMttrMins / 60).toFixed(1)}h` : `${avgTicketMttrMins}m`) : "N/A"}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium">avg resolve</span>
+                    </div>
+                  </div>
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Incident MTTR</span>
+                    <div className="flex items-baseline gap-1 mt-1">
+                      <span className="text-xl font-bold text-amber-400">
+                        {avgIncMttrMins !== null ? (avgIncMttrMins > 60 ? `${(avgIncMttrMins / 60).toFixed(1)}h` : `${avgIncMttrMins}m`) : "N/A"}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium">avg outage fix</span>
+                    </div>
+                  </div>
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">SLA Breaches</span>
+                    <div className="flex items-baseline gap-1 mt-1">
+                      <span className={`text-xl font-bold ${breachedTicketsCount > 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                        {breachedTicketsCount}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium">breached</span>
+                    </div>
+                  </div>
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Active Queue</span>
+                    <div className="flex items-baseline gap-1 mt-1">
+                      <span className="text-xl font-bold text-slate-100">{openTicketsCount}</span>
+                      <span className="text-[10px] text-slate-500 font-medium">open tickets</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Filtering Controls Bar */}
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
                 {/* Status Filter Buttons */}
@@ -2515,7 +2885,7 @@ export default function HelpdeskAI() {
                 </div>
 
                 <div className="flex items-center gap-3 flex-wrap">
-                  {/* Technician Filter (for Admin / Technicians) */}
+                  {/* Technician Filter (for Admin / Technicians - Strictly Technicians Only) */}
                   {userRole !== "user" && (
                     <div className="flex items-center gap-1.5">
                       <span className="text-slate-400 font-medium">Technician:</span>
@@ -2526,10 +2896,10 @@ export default function HelpdeskAI() {
                       >
                         <option value="ALL">All Technicians</option>
                         {members
-                          .filter(m => m.role === "technician" || m.role === "admin")
+                          .filter(m => m.role === "technician" && m.is_active !== false)
                           .map(m => (
                             <option key={m.id} value={m.id}>
-                              {m.full_name || m.email}
+                              {m.full_name || m.email} ({m.department || "General IT"})
                             </option>
                           ))}
                       </select>
@@ -2656,7 +3026,7 @@ export default function HelpdeskAI() {
                               </div>
                             </div>
                           )}
-                          {/* Attached Pre-Diagnostic Context Card */}
+                          {/* Pre-Diagnostic Context Card */}
                           {t.diagnostics && (
                             <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
                               <span className="flex items-center gap-1 text-slate-300 font-medium">
@@ -2679,6 +3049,9 @@ export default function HelpdeskAI() {
                               </span>
                             </div>
                           )}
+
+                          {/* Live Dynamic SLA Countdown Bar */}
+                          <TicketSlaBar ticket={t} slaHours={orgConfig?.ticket_sla_hours || 1} />
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0 flex-wrap">
@@ -2691,6 +3064,22 @@ export default function HelpdeskAI() {
                             <MessageSquare className="w-3.5 h-3.5" />
                             <span>Chat & Notes</span>
                           </button>
+
+                          {/* Admin 1-Click Ticket Re-Route */}
+                          {userRole === "admin" && !isClosed && (
+                            <button
+                              onClick={() => {
+                                setRerouteModalTicket(t);
+                                setCardRerouteTeam(t.team || teams[0]?.team_name || "IT Support");
+                                setCardRerouteTechId(t.assigned_to || "auto");
+                              }}
+                              className="bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-700/50 text-indigo-300 text-xs px-2.5 py-1.5 rounded-lg transition-colors font-medium flex items-center gap-1.5"
+                              title="Re-route ticket to another queue or technician"
+                            >
+                              <GitBranch className="w-3.5 h-3.5 text-indigo-400" />
+                              <span>Re-route</span>
+                            </button>
+                          )}
 
                           {/* Technician WIP & Resolve Toggles */}
                           {userRole !== "user" && !isClosed && (
@@ -2770,6 +3159,16 @@ export default function HelpdeskAI() {
               setServices(prev => prev.filter(s => s.name !== svc.name));
             }}
             onRefreshHealth={loadData}
+            onServiceOutage={async (svc, pingRes) => {
+              const targetTeam = resolveTeamForFailure(svc.name, pingRes?.error || "Endpoint health ping failed");
+              await triggerIncident({
+                title: `Service Outage: ${svc.name}`,
+                app: svc.name,
+                severity: "CRITICAL",
+                team: targetTeam,
+                desc: `Automated health monitor detected HTTP ${pingRes?.status || "ERR"} (${pingRes?.latency || 0}ms latency). Error: ${pingRes?.error || "Health check timed out or refused connection"}. Auto-escalating to ${targetTeam}.`
+              });
+            }}
           />
         )}
 
@@ -2873,6 +3272,7 @@ export default function HelpdeskAI() {
                 orgId={orgConfig?.id || currentUserProfile?.org_id}
                 orgConfig={orgConfig}
                 teams={teams}
+                onMembersChange={(updated) => setMembers(updated)}
               />
             )}
 
@@ -3009,9 +3409,9 @@ export default function HelpdeskAI() {
 
       {/* New Ticket Modal */}
       {newTicket && (() => {
-        // Filter technicians belonging to the selected team (or general IT)
-        const selectedTeamTechs = members.filter(m => 
-          (m.role === "technician" || m.role === "admin") &&
+        // Filter technicians belonging to the selected team (or general IT) - strictly technicians, never admin
+        const pureTechs = members.filter(m => m.role === "technician" && m.is_active !== false);
+        const selectedTeamTechs = pureTechs.filter(m => 
           (!m.department || m.department.toLowerCase() === (ticketForm.team || "").toLowerCase() || m.department === "General IT" || m.department === "IT Support")
         );
 
@@ -3122,11 +3522,17 @@ export default function HelpdeskAI() {
                     {selectedTeamTechs.length > 0 ? (
                       selectedTeamTechs.map(tech => (
                         <option key={tech.id} value={tech.id}>
-                          {tech.full_name || tech.email}
+                          {tech.full_name || tech.email} ({tech.department || ticketForm.team})
+                        </option>
+                      ))
+                    ) : pureTechs.length > 0 ? (
+                      pureTechs.map(tech => (
+                        <option key={tech.id} value={tech.id}>
+                          {tech.full_name || tech.email} ({tech.department || "Other Team"})
                         </option>
                       ))
                     ) : (
-                      <option value="auto" disabled>No technicians in this team</option>
+                      <option value="auto" disabled>No technicians registered</option>
                     )}
                   </select>
                 </div>
@@ -3189,6 +3595,8 @@ export default function HelpdeskAI() {
             currentUser={currentUser}
             currentUserProfile={currentUserProfile}
             orgConfig={orgConfig}
+            teams={teams}
+            members={members}
             onClose={() => setActiveChatTicket(null)}
             onTicketUpdated={(updatedTicket) => {
               setTickets(prev => prev.map(t => t.id === updatedTicket.id ? updatedTicket : t));
@@ -3196,6 +3604,192 @@ export default function HelpdeskAI() {
             }}
           />
         </Suspense>
+      )}
+
+      {/* Root Cause Analysis (RCA) Resolution Modal */}
+      {rcaModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div>
+                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  Incident Resolution & Root Cause Analysis (RCA)
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Document the root cause and corrective actions taken for <strong>{rcaModal.title}</strong>
+                </p>
+              </div>
+              <button
+                onClick={() => setRcaModal(null)}
+                className="text-slate-500 hover:text-slate-300 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmRcaResolution} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  Root Cause Analysis (What caused the outage?) *
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={rcaForm.root_cause}
+                  onChange={e => setRcaForm({ ...rcaForm, root_cause: e.target.value })}
+                  placeholder="e.g. Memory leak in background worker caused container OOM crash after spike in payload volume."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-100 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  Actions Taken to Resolve *
+                </label>
+                <textarea
+                  required
+                  rows={2}
+                  value={rcaForm.resolution_actions}
+                  onChange={e => setRcaForm({ ...rcaForm, resolution_actions: e.target.value })}
+                  placeholder="e.g. Restarted service cluster, purged stale queue items, and doubled pod memory allocation."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-100 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">
+                    Preventive Measures
+                  </label>
+                  <input
+                    type="text"
+                    value={rcaForm.preventive_measure}
+                    onChange={e => setRcaForm({ ...rcaForm, preventive_measure: e.target.value })}
+                    placeholder="e.g. Added automated heap dump alerts."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-slate-100 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">
+                    Affected Users / Units
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={rcaForm.affected_count}
+                    onChange={e => setRcaForm({ ...rcaForm, affected_count: e.target.value })}
+                    placeholder="e.g. 150"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-slate-100 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setRcaModal(null)}
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded-lg font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingRca}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-medium py-2 rounded-lg shadow-lg shadow-emerald-950 flex items-center justify-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{submittingRca ? "Resolving & Logging..." : "Confirm & Send RCA Notice"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Ticket Re-Route Modal */}
+      {rerouteModalTicket && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div>
+                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                  <GitBranch className="w-4 h-4 text-indigo-400" />
+                  Re-Route Ticket #{rerouteModalTicket.id}
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Transfer ticket to another department queue or technician
+                </p>
+              </div>
+              <button
+                onClick={() => setRerouteModalTicket(null)}
+                className="text-slate-500 hover:text-slate-300 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleReRouteTicket} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  Destination IT Department Queue
+                </label>
+                <select
+                  value={cardRerouteTeam}
+                  onChange={e => {
+                    setCardRerouteTeam(e.target.value);
+                    setCardRerouteTechId("auto");
+                  }}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500"
+                >
+                  {teams.map(tm => (
+                    <option key={tm.id} value={tm.team_name}>
+                      {tm.team_name} {tm.is_default ? "(Default)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  Assigned Technician
+                </label>
+                <select
+                  value={cardRerouteTechId}
+                  onChange={e => setCardRerouteTechId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="auto">⚡ Next Available in Queue (Auto)</option>
+                  {members
+                    .filter(m => m.role === "technician" && m.is_active !== false)
+                    .map(m => (
+                      <option key={m.id} value={m.id}>
+                        {m.full_name || m.email} ({m.department || "General IT"})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setRerouteModalTicket(null)}
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded-lg font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingCardReroute}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium py-2 rounded-lg shadow-lg shadow-indigo-950 flex items-center justify-center gap-1.5"
+                >
+                  <GitBranch className="w-4 h-4" />
+                  <span>{savingCardReroute ? "Re-routing..." : "Transfer Ticket"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Change Password Modal */}

@@ -33,6 +33,7 @@ export default function CompanySettings({
     support_phone: orgConfig?.support_phone || "+234 800 000 0000",
     support_email: orgConfig?.support_email || "it-support@company.com",
     allstaff_email: orgConfig?.allstaff_email || "all-staff@company.com",
+    incident_manager_email: orgConfig?.incident_manager_email || "",
     support_chat_link: orgConfig?.support_chat_link || "",
     support_whatsapp: orgConfig?.support_whatsapp || "",
     incident_sla_minutes: orgConfig?.incident_sla_minutes || 10,
@@ -153,6 +154,7 @@ export default function CompanySettings({
         support_phone: orgConfig.support_phone || prev.support_phone,
         support_email: orgConfig.support_email || prev.support_email,
         allstaff_email: orgConfig.allstaff_email || prev.allstaff_email,
+        incident_manager_email: orgConfig.incident_manager_email !== undefined ? orgConfig.incident_manager_email : prev.incident_manager_email,
         support_chat_link: orgConfig.support_chat_link !== undefined ? orgConfig.support_chat_link : prev.support_chat_link,
         support_whatsapp: orgConfig.support_whatsapp !== undefined ? orgConfig.support_whatsapp : prev.support_whatsapp,
         incident_sla_minutes: orgConfig.incident_sla_minutes || prev.incident_sla_minutes,
@@ -728,6 +730,20 @@ export default function CompanySettings({
                 onChange={e => setForm({ ...form, allstaff_email: e.target.value })}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                Central Incident Escalation Manager Email <span className="text-slate-500 font-normal">(Tier 2 15-min Incident Command)</span>
+              </label>
+              <input
+                type="email"
+                placeholder="incident-manager@company.com (defaults to support email)"
+                value={form.incident_manager_email || ""}
+                onChange={e => setForm({ ...form, incident_manager_email: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
+              />
+              <p className="text-[11px] text-slate-500 mt-1">This duty manager receives all Tier 2 incident escalations across the entire workspace.</p>
             </div>
 
             <div>

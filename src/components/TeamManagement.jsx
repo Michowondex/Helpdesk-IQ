@@ -13,7 +13,12 @@ const FAILURE_LABELS = {
 
 function TeamCard({ team, onDelete, onToggleDefault, onEdit }) {
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ team_name: team.team_name, alert_email: team.alert_email || "", webhook_url: team.webhook_url || "" });
+  const [editForm, setEditForm] = useState({ 
+    team_name: team.team_name, 
+    alert_email: team.alert_email || "", 
+    supervisor_email: team.supervisor_email || "",
+    webhook_url: team.webhook_url || "" 
+  });
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -39,7 +44,14 @@ function TeamCard({ team, onDelete, onToggleDefault, onEdit }) {
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
                 value={editForm.alert_email}
                 onChange={e => setEditForm({ ...editForm, alert_email: e.target.value })}
-                placeholder="alert@company.com"
+                placeholder="Team Dispatch Email (e.g. network@company.com)"
+                type="email"
+              />
+              <input
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
+                value={editForm.supervisor_email}
+                onChange={e => setEditForm({ ...editForm, supervisor_email: e.target.value })}
+                placeholder="Supervisor / Team Lead Email (e.g. lead@company.com)"
                 type="email"
               />
               <input
@@ -76,6 +88,12 @@ function TeamCard({ team, onDelete, onToggleDefault, onEdit }) {
                 <Mail className="w-3 h-3 text-slate-500" />
                 <span className="truncate">{team.alert_email || <em className="text-slate-600">No email set</em>}</span>
               </div>
+              {team.supervisor_email && (
+                <div className="flex items-center gap-1 text-xs text-indigo-300 mt-0.5">
+                  <Shield className="w-3 h-3 text-indigo-400" />
+                  <span className="truncate font-medium">Supervisor: {team.supervisor_email}</span>
+                </div>
+              )}
               {team.webhook_url && (
                 <div className="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
                   <Webhook className="w-3 h-3" />
@@ -112,7 +130,7 @@ export default function TeamManagement({ orgId, onTeamsChange }) {
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [addForm, setAddForm] = useState({ team_name: "", alert_email: "", webhook_url: "", is_default: false });
+  const [addForm, setAddForm] = useState({ team_name: "", alert_email: "", supervisor_email: "", webhook_url: "", is_default: false });
   const [adding, setAdding] = useState(false);
   const [banner, setBanner] = useState(null);
 
@@ -169,6 +187,7 @@ export default function TeamManagement({ orgId, onTeamsChange }) {
       org_id: orgId,
       team_name: addForm.team_name.trim(),
       alert_email: addForm.alert_email.trim() || null,
+      supervisor_email: addForm.supervisor_email.trim() || null,
       webhook_url: addForm.webhook_url.trim() || null,
       is_default: addForm.is_default
     });
@@ -177,7 +196,7 @@ export default function TeamManagement({ orgId, onTeamsChange }) {
       notify(`Error: ${error.message}`, "#ef4444");
     } else {
       notify(`Team "${addForm.team_name}" added successfully!`);
-      setAddForm({ team_name: "", alert_email: "", webhook_url: "", is_default: false });
+      setAddForm({ team_name: "", alert_email: "", supervisor_email: "", webhook_url: "", is_default: false });
       setShowAdd(false);
       loadTeams();
     }
@@ -206,6 +225,7 @@ export default function TeamManagement({ orgId, onTeamsChange }) {
     await supabase.from("teams").update({
       team_name: form.team_name,
       alert_email: form.alert_email || null,
+      supervisor_email: form.supervisor_email || null,
       webhook_url: form.webhook_url || null,
     }).eq("id", teamId);
     notify("Team updated.");
@@ -348,7 +368,7 @@ export default function TeamManagement({ orgId, onTeamsChange }) {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Alert Email Address</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Alert Email Address (Team Queue)</label>
                 <input
                   type="email"
                   placeholder="network@company.com (or leave blank)"
@@ -357,6 +377,18 @@ export default function TeamManagement({ orgId, onTeamsChange }) {
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
                 />
                 <p className="text-[11px] text-slate-500 mt-1">BizaDesk will email this address when an incident routes to this team.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Supervisor / Lead Email (Tier 2 Escalation)</label>
+                <input
+                  type="email"
+                  placeholder="team.lead@company.com (optional)"
+                  value={addForm.supervisor_email}
+                  onChange={e => setAddForm({ ...addForm, supervisor_email: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">Receives Tier 2 escalation notice if an incident in this team stays unresolved for 15 minutes.</p>
               </div>
 
               <div>

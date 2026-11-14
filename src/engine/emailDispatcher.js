@@ -17,7 +17,7 @@ export const DEFAULT_INCIDENT_TEMPLATES = {
   },
   resolution: {
     subject: `[RESOLVED] {{title}} — {{incident_id}}`,
-    body: `Dear All,\n\nThe following incident has been RESOLVED.\n\nINCIDENT: {{incident_id}}\nTITLE: {{title}}\nAPPLICATION: {{application}}\nRESOLVED BY: {{resolved_by}}\nTIME TO RESOLVE: {{time_open}} minutes\n\nAll systems are now operating normally.\n\nRegards,\n{{company_name}} IT Operations`
+    body: `Dear All,\n\nThe following incident has been RESOLVED.\n\nINCIDENT: {{incident_id}}\nTITLE: {{title}}\nAPPLICATION: {{application}}\nRESOLVED BY: {{resolved_by}}\nTIME TO RESOLVE: {{time_open}} minutes\n\nROOT CAUSE ANALYSIS (RCA):\n{{rca_summary}}\n\nACTIONS TAKEN:\n{{resolution_actions}}\n\nPREVENTIVE MEASURES:\n{{preventive_measure}}\n\nAll systems are now operating normally.\n\nRegards,\n{{company_name}} IT Operations`
   }
 };
 

@@ -33,7 +33,7 @@ const STARTER_ENDPOINTS = [
   }
 ];
 
-export default function MonitoredServices({ services = [], teams = [], userRole = "user", onAddService, onDeleteService, onRefreshHealth }) {
+export default function MonitoredServices({ services = [], teams = [], userRole = "user", onAddService, onDeleteService, onRefreshHealth, onServiceOutage }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [pingingId, setPingingId] = useState(null);
@@ -93,6 +93,10 @@ export default function MonitoredServices({ services = [], teams = [], userRole 
               latency_ms: pingResult.latency,
               last_checked_at: pingResult.checked_at
             }).eq("id", svc.id);
+
+            if (pingResult.status === "DOWN" && svc.status !== "DOWN" && onServiceOutage) {
+              onServiceOutage(svc, pingResult);
+            }
           } catch (e) {
             console.warn("Update health ping error:", e);
           }
@@ -128,6 +132,10 @@ export default function MonitoredServices({ services = [], teams = [], userRole 
           latency_ms: pingResult.latency,
           last_checked_at: pingResult.checked_at
         }).eq("id", svc.id);
+
+        if (pingResult.status === "DOWN" && svc.status !== "DOWN" && onServiceOutage) {
+          onServiceOutage(svc, pingResult);
+        }
       } catch (e) {
         console.warn("Single ping update error:", e);
       }

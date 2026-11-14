@@ -20,7 +20,7 @@ const ROLE_BADGES = {
   }
 };
 
-export default function UserManagement({ orgId, orgConfig, teams = [] }) {
+export default function UserManagement({ orgId, orgConfig, teams = [], onMembersChange }) {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -74,6 +74,7 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
       const { data, error } = await query;
       if (!error && data) {
         setMembers(data);
+        if (onMembersChange) onMembersChange(data);
       }
     } catch (err) {
       console.warn("Error loading members:", err);
@@ -120,9 +121,10 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
       // The invited user signs in later (Google OAuth or email link),
       // and App.jsx fetchProfile() will claim & link this profile row
       // to their auth.uid automatically.
+      const targetOrgId = orgId || orgConfig?.id || null;
       const newMemberPayload = {
         id: profileId,
-        org_id: orgId || null,
+        org_id: targetOrgId,
         full_name: fullName.trim(),
         email: targetEmail,
         role: role,

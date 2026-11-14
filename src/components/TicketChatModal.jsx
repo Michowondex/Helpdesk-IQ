@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { MessageSquare, Send, Shield, User, Clock, CheckCircle2, AlertCircle, X, Lock, Paperclip, Monitor, Globe, Cpu, Copy, Check, RefreshCw, Key } from "lucide-react";
+import { MessageSquare, Send, Shield, User, Clock, CheckCircle2, AlertCircle, X, Lock, Paperclip, Monitor, Globe, Cpu, Copy, Check, RefreshCw, Key, Share2, GitBranch } from "lucide-react";
 import { supabase } from "../supabase";
 
-export default function TicketChatModal({ ticket, currentUser, currentUserProfile, onClose, onTicketUpdated }) {
+export default function TicketChatModal({ ticket, currentUser, currentUserProfile, orgConfig, teams = [], members = [], onClose, onTicketUpdated }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [isInternal, setIsInternal] = useState(false);
@@ -13,6 +13,71 @@ export default function TicketChatModal({ ticket, currentUser, currentUserProfil
   const [assistCode, setAssistCode] = useState("842-194");
   const [copiedCode, setCopiedCode] = useState(false);
   const messagesEndRef = useRef(null);
+
+  // Re-route panel state (Admin only)
+  const isAdmin = currentUserProfile?.role === "admin" || currentUser?.email?.toLowerCase().endsWith("@bizadoc.com");
+  const [showReroute, setShowReroute] = useState(false);
+  const [rerouteTeam, setRerouteTeam] = useState(ticket?.team || "IT Helpdesk");
+  const [rerouteTechId, setRerouteTechId] = useState(ticket?.assigned_to || "auto");
+  const [savingReroute, setSavingReroute] = useState(false);
+
+  // Live SLA calculation
+  const slaHours = Number(orgConfig?.ticket_sla_hours) || 1;
+  const slaMs = slaHours * 3600000;
+  const elapsedMs = Math.max(0, Date.now() - (ticket?.created || Date.now()));
+  const remainingMs = slaMs - elapsedMs;
+  const isBreached = remainingMs <= 0 || ticket?.sla_breached;
+  const pctRemaining = Math.max(0, Math.min(100, Math.round((remainingMs / slaMs) * 100)));
+  const remainingMins = Math.abs(Math.round(remainingMs / 60000));
+
+  // Pure technicians list (strictly excluding Admins)
+  const pureTechs = members.filter(m => m.role === "technician" && m.is_active !== false);
+  const teamTechs = pureTechs.filter(m => !m.department || m.department.toLowerCase() === rerouteTeam.toLowerCase());
+
+  const handleApplyReroute = async () => {
+    setSavingReroute(true);
+    try {
+      const chosenTech = pureTechs.find(t => t.id === rerouteTechId);
+      const newAssigneeName = chosenTech ? (chosenTech.full_name || chosenTech.email) : `Unassigned (${rerouteTeam})`;
+      const newAssigneeId = chosenTech ? chosenTech.id : null;
+
+      await supabase.from("tickets").update({
+        team: rerouteTeam,
+        assigned_to: newAssigneeId,
+        assignee_name: newAssigneeName
+      }).eq("id", ticket.id);
+
+      const auditMsg = {
+        ticket_id: ticket.id,
+        org_id: ticket.org_id || null,
+        sender_id: currentUser?.id || "admin-system",
+        sender_name: "Admin Dispatch",
+        sender_role: "admin",
+        is_internal: true,
+        message: `🔄 Ticket re-routed to queue "${rerouteTeam}" — Assigned to: ${newAssigneeName}`,
+        created_at: new Date().toISOString()
+      };
+
+      try {
+        await supabase.from("ticket_messages").insert(auditMsg);
+        setMessages(prev => [...prev, { ...auditMsg, id: `msg-${Date.now()}` }]);
+      } catch (_) {}
+
+      if (onTicketUpdated) {
+        onTicketUpdated({
+          ...ticket,
+          team: rerouteTeam,
+          assigned_to: newAssigneeId,
+          assignee_name: newAssigneeName
+        });
+      }
+      setShowReroute(false);
+    } catch (err) {
+      console.warn("Re-route error:", err);
+    } finally {
+      setSavingReroute(false);
+    }
+  };
 
   const isTechOrAdmin = currentUserProfile?.role === "technician" || currentUserProfile?.role === "admin";
 
@@ -171,6 +236,23 @@ export default function TicketChatModal({ ticket, currentUser, currentUserProfil
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {/* Admin Re-Route Button */}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setShowReroute(!showReroute)}
+                className={`text-xs px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-colors font-medium border ${
+                  showReroute 
+                    ? "bg-amber-600/30 text-amber-300 border-amber-500/50" 
+                    : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700"
+                }`}
+                title="Re-route ticket to a different team or technician"
+              >
+                <GitBranch className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="hidden sm:inline">Re-route</span>
+              </button>
+            )}
+
             {/* Quick Assist Launch Button (Technicians / Admins only) */}
             {isTechOrAdmin && (
               <button
@@ -209,6 +291,127 @@ export default function TicketChatModal({ ticket, currentUser, currentUserProfil
             </button>
           </div>
         </div>
+
+        {/* Live SLA Progress Bar */}
+        <div className="px-5 py-2.5 bg-slate-950 border-b border-slate-800 shrink-0 space-y-1">
+          <div className="flex items-center justify-between text-xs">
+            <span className={`font-semibold flex items-center gap-1.5 ${
+              currentStatus === "RESOLVED" 
+                ? "text-emerald-400" 
+                : isBreached 
+                ? "text-rose-400 animate-pulse" 
+                : pctRemaining < 25 
+                ? "text-rose-400" 
+                : pctRemaining < 50 
+                ? "text-amber-400" 
+                : "text-slate-300"
+            }`}>
+              <Clock className="w-3.5 h-3.5" />
+              {currentStatus === "RESOLVED"
+                ? `Resolved in ${Math.max(1, Math.round(((ticket.resolved_at || Date.now()) - ticket.created) / 60000))}m`
+                : isBreached
+                ? `🚨 SLA Breached by ${remainingMins}m`
+                : `${remainingMins}m remaining before breach`}
+            </span>
+            <div className="flex items-center gap-2 text-[11px] text-slate-400">
+              <span>Queue: <strong className="text-indigo-300">{ticket.team}</strong></span>
+              <span>• Assignee: <strong className="text-slate-200">{ticket.assignee_name || "Unassigned"}</strong></span>
+            </div>
+          </div>
+          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${
+                currentStatus === "RESOLVED"
+                  ? "bg-emerald-500"
+                  : isBreached
+                  ? "bg-rose-500 animate-pulse"
+                  : pctRemaining < 25
+                  ? "bg-rose-500"
+                  : pctRemaining < 50
+                  ? "bg-amber-500"
+                  : "bg-emerald-500"
+              }`}
+              style={{ width: currentStatus === "RESOLVED" ? "100%" : isBreached ? "100%" : `${pctRemaining}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Admin Re-Route Panel (Collapsible) */}
+        {showReroute && (
+          <div className="px-5 py-3 bg-indigo-950/30 border-b border-indigo-500/30 shrink-0 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                <GitBranch className="w-3.5 h-3.5 text-indigo-400" />
+                Re-Route Ticket Queue & Assignee (Admin Control)
+              </span>
+              <button onClick={() => setShowReroute(false)} className="text-slate-400 hover:text-white text-xs">✕</button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">Target IT Queue / Department</label>
+                <select
+                  value={rerouteTeam}
+                  onChange={e => {
+                    setRerouteTeam(e.target.value);
+                    setRerouteTechId("auto");
+                  }}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+                >
+                  {teams.length > 0 ? (
+                    teams.map(t => (
+                      <option key={t.id} value={t.team_name}>
+                        {t.team_name}{t.is_default ? " ★ (Default Fallback)" : ""}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="IT Helpdesk">IT Helpdesk</option>
+                      <option value="Network Team">Network Team</option>
+                      <option value="Database Team">Database Team</option>
+                      <option value="Security Team">Security Team</option>
+                    </>
+                  )}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">Specific Technician (Technicians Only)</label>
+                <select
+                  value={rerouteTechId}
+                  onChange={e => setRerouteTechId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+                >
+                  <option value="auto">⚡ Next Available in Queue (Auto)</option>
+                  {teamTechs.length > 0 ? (
+                    teamTechs.map(tech => (
+                      <option key={tech.id} value={tech.id}>
+                        {tech.full_name || tech.email}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="auto" disabled>No technicians assigned to {rerouteTeam}</option>
+                  )}
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowReroute(false)}
+                className="px-3 py-1 text-xs text-slate-400 hover:text-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={savingReroute}
+                onClick={handleApplyReroute}
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold px-4 py-1.5 rounded-lg shadow transition-colors flex items-center gap-1"
+              >
+                {savingReroute ? "Re-routing..." : "Apply Re-Route"}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Pre-Diagnostic System Context Bar */}
         {ticket.diagnostics && (
