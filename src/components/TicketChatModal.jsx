@@ -224,7 +224,7 @@ export default function TicketChatModal({ ticket, currentUser, currentUserProfil
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-mono font-bold text-xs text-white">{ticket.id}</span>
+                <span className="font-mono font-bold text-xs text-white">{ticket.ticket_code || (ticket.id && ticket.id.length > 10 ? `TKT-${ticket.id.slice(0, 6).toUpperCase()}` : ticket.id)}</span>
                 <span className={`text-[9px] font-bold px-2 py-0.5 rounded border ${
                   currentStatus === "RESOLVED"
                     ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"

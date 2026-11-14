@@ -1496,9 +1496,9 @@ export default function HelpdeskAI() {
   }, [services, incidents, teams]);
 
   const triggerIncident = async (formData) => {
-    const id = `INC-${String(incidents.length + 1).padStart(3, "0")}`;
+    const incCode = `INC-${String(incidents.length + 1).padStart(3, "0")}`;
     const inc = {
-      id,
+      incident_code: incCode,
       org_id: orgConfig?.id || currentUserProfile?.org_id || null,
       title: sanitizeInput(formData.title),
       severity: formData.severity,
@@ -1513,29 +1513,33 @@ export default function HelpdeskAI() {
       assignee: "Unassigned"
     };
 
-    const { error } = await supabase.from("incidents").insert(inc);
+    const { data: insertedInc, error } = await supabase.from("incidents").insert(inc).select().single();
     if (error) {
       showBanner(`Error: ${error.message}`, "#ef4444");
       return;
     }
-    await saveEmail(buildEmail(inc, "initial"));
+    const realInc = insertedInc || inc;
+    const displayIncId = realInc.incident_code || incCode;
+
+    await saveEmail(buildEmail(realInc, "initial"));
     try {
       await supabase.from("user_notifications").insert({
-        org_id: inc.org_id,
+        org_id: realInc.org_id,
         type: "incident",
-        incident_id: id,
-        title: `🚨 Incident ${id} Created: ${inc.title}`,
-        message: `Severity: ${inc.severity} across ${inc.app} assigned to ${inc.team}.`,
-        assigned_to: inc.team,
+        incident_id: realInc.id || displayIncId,
+        title: `🚨 Incident ${displayIncId} Created: ${realInc.title}`,
+        message: `Severity: ${realInc.severity} across ${realInc.app} assigned to ${realInc.team}.`,
+        assigned_to: realInc.team,
         read: false,
         created_at: Date.now()
       });
     } catch (_) {
       // Ignored
     }
-    showBanner(`🚨 ${id} Created — ${formData.team} Notified`, "#f97316");
+    showBanner(`🚨 ${displayIncId} Created — ${formData.team} Notified`, "#f97316");
     setNewIncModal(false);
     setIncForm({ title: "", severity: "HIGH", app: "", team: "Database Team", desc: "" });
+    setIncidents(prev => [realInc, ...prev.filter(x => x.id !== realInc.id)]);
     loadData();
   };
 
@@ -1706,7 +1710,7 @@ export default function HelpdeskAI() {
 
     setSubmittingTicket(true);
     try {
-      const id = `TKT-${String(100 + tickets.length + 1)}`;
+      const ticketCode = customTicketData?.ticket_code || customTicketData?.id || `TKT-${String(100 + tickets.length + 1)}`;
       const teamMap = {
         "Network Issue": "Network Team",
         "Software Issue": "Application Support",
@@ -1788,7 +1792,7 @@ export default function HelpdeskAI() {
     }
 
     const t = {
-      id,
+      ticket_code: ticketCode,
       org_id: targetOrgId,
       title: sanitizeInput(customTicketData?.title || ticketForm.title),
       ticket_type: chosenType,
@@ -1812,18 +1816,31 @@ export default function HelpdeskAI() {
       visit_city: customTicketData?.visit_city || null
     };
 
+    let insertedTicket = t;
     try {
-      await supabase.from("tickets").insert(t);
+      const { data: inserted, error: insertError } = await supabase
+        .from("tickets")
+        .insert(t)
+        .select()
+        .single();
+      if (!insertError && inserted) {
+        insertedTicket = inserted;
+      } else if (insertError) {
+        console.warn("Tickets insert warning:", insertError);
+      }
     } catch (err) {
-      console.warn("Tickets insert warning:", err);
+      console.warn("Tickets insert exception:", err);
     }
+
+    const displayId = insertedTicket.ticket_code || ticketCode;
+    const realDbId = insertedTicket.id || displayId;
 
     // Dispatch In-App Notifications & Persist to Database for Next-Day Login
     const newNotif = {
       id: `notif-${Date.now()}`,
       type: "ticket",
-      ticket_id: id,
-      title: `Ticket ${id} Routed & Assigned`,
+      ticket_id: realDbId,
+      title: `Ticket ${displayId} Routed & Assigned`,
       message: `"${t.title}" assigned to ${assignedTechName} (${effectiveTeam}) with ${t.priority} priority.`,
       time: Date.now(),
       read: false,
@@ -1836,7 +1853,7 @@ export default function HelpdeskAI() {
         org_id: t.org_id,
         user_id: assignedTechId,
         type: "ticket",
-        ticket_id: id,
+        ticket_id: realDbId,
         title: newNotif.title,
         message: newNotif.message,
         assigned_to: assignedTechName,
@@ -1854,7 +1871,7 @@ export default function HelpdeskAI() {
 
     // Dispatch Outbound White-Label Ticket Emails
     try {
-      const createdMail = buildTicketEmail(t, "ticket_created");
+      const createdMail = buildTicketEmail(insertedTicket, "ticket_created");
       if (createdMail) await saveEmail(createdMail);
     } catch (e) {
       console.warn("Could not dispatch ticket created email:", e);
@@ -1862,7 +1879,7 @@ export default function HelpdeskAI() {
 
     if (assignedTechId) {
       try {
-        const assignedMail = buildTicketEmail(t, "ticket_assigned");
+        const assignedMail = buildTicketEmail(insertedTicket, "ticket_assigned");
         if (assignedMail) await saveEmail(assignedMail);
       } catch (e) {
         console.warn("Could not dispatch ticket assigned email:", e);
@@ -1880,9 +1897,10 @@ export default function HelpdeskAI() {
       assigned_to: "auto"
     });
 
-    showBanner(`🎫 Ticket ${id} Routed to ${assignedTechName} (${effectiveTeam})`, "#6366f1");
+    setTickets(prev => [insertedTicket, ...prev.filter(x => x.id !== insertedTicket.id)]);
+    showBanner(`🎫 Ticket ${displayId} Routed to ${assignedTechName} (${effectiveTeam})`, "#6366f1");
     loadData();
-    return t;
+    return insertedTicket;
   } catch (err) {
     console.error("submitTicket error:", err);
     showBanner(`Could not submit ticket: ${err.message}`, "#ef4444");
@@ -2292,13 +2310,14 @@ export default function HelpdeskAI() {
     try {
       const { data, error } = await supabase.from("monitored_services").insert({
         ...serviceData,
-        org_id: orgConfig?.id || null
+        org_id: orgConfig?.id || currentUserProfile?.org_id || null
       }).select().single();
 
       if (!error && data) {
-        setServices(prev => [data, ...prev]);
-        showBanner(`Monitored app "${serviceData.name}" added & live!`, "#22c55e");
+        setServices(prev => [data, ...prev.filter(s => s.id !== data.id)]);
+        showBanner(`Monitored app "${serviceData.name}" added & saved permanently!`, "#22c55e");
       } else {
+        if (error) console.error("Monitored services insert error:", error);
         setServices(prev => [{ ...serviceData, id: `svc-${Date.now()}` }, ...prev]);
         showBanner(`Monitored app "${serviceData.name}" added!`, "#22c55e");
       }
@@ -2952,7 +2971,7 @@ export default function HelpdeskAI() {
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
                           <div className="flex items-center gap-2 mb-1.5">
-                            <span className="font-mono font-bold text-slate-100">{inc.id}</span>
+                            <span className="font-mono font-bold text-slate-100">{inc.incident_code || (inc.id && inc.id.length > 10 ? `INC-${inc.id.slice(0, 6).toUpperCase()}` : inc.id)}</span>
                             <span
                               className="text-[10px] font-bold px-2 py-0.5 rounded border"
                               style={{ 
@@ -3266,7 +3285,7 @@ export default function HelpdeskAI() {
                       >
                         <div>
                           <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span className="font-mono font-bold text-slate-100">{t.id}</span>
+                            <span className="font-mono font-bold text-slate-100">{t.ticket_code || (t.id && t.id.length > 10 ? `TKT-${t.id.slice(0, 6).toUpperCase()}` : t.id)}</span>
                             
                             {/* Status Badge */}
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${

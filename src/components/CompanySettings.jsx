@@ -91,21 +91,60 @@ export default function CompanySettings({
     if (!window.confirm("Are you sure you want to remove your authenticator device? You will no longer be prompted for 2FA on login.")) return;
     setDisablingMfa(true);
     try {
-      const { data } = await supabase.auth.mfa.listFactors();
+      const { data, error: listErr } = await supabase.auth.mfa.listFactors();
+      if (listErr) throw listErr;
       const allTotp = data?.totp || [];
-      if (allTotp.length === 0 && activeMfaFactor?.id) {
-        await supabase.auth.mfa.unenroll({ factorId: activeMfaFactor.id });
-      } else {
-        for (const factor of allTotp) {
-          try {
-            await supabase.auth.mfa.unenroll({ factorId: factor.id });
-          } catch (factorErr) {
-            console.warn("Unenroll factor step:", factorErr);
+      const targetFactor = allTotp.find(f => f.status === "verified") || allTotp[0] || activeMfaFactor;
+
+      if (targetFactor?.id) {
+        let { error: unenrollErr } = await supabase.auth.mfa.unenroll({ factorId: targetFactor.id });
+
+        if (unenrollErr) {
+          // If unenroll requires AAL2 elevation, challenge and prompt user for their 6-digit code
+          console.warn("Direct unenroll notice, issuing challenge:", unenrollErr.message);
+          const { data: challengeData, error: challengeErr } = await supabase.auth.mfa.challenge({ factorId: targetFactor.id });
+          if (!challengeErr && challengeData?.id) {
+            const code = window.prompt("To authorize removing 2FA, please enter the 6-digit code currently shown on your Microsoft/Google Authenticator app:");
+            if (!code || !code.trim()) {
+              alert("Unenroll cancelled: 6-digit security code was not provided.");
+              setDisablingMfa(false);
+              return;
+            }
+            const { error: verifyErr } = await supabase.auth.mfa.verify({
+              factorId: targetFactor.id,
+              challengeId: challengeData.id,
+              code: code.trim()
+            });
+            if (verifyErr) {
+              alert("Verification failed: " + verifyErr.message);
+              setDisablingMfa(false);
+              return;
+            }
+            // Session is now AAL2 verified; unenroll factor
+            const { error: retryErr } = await supabase.auth.mfa.unenroll({ factorId: targetFactor.id });
+            if (retryErr) {
+              alert("Could not remove 2FA: " + retryErr.message);
+              setDisablingMfa(false);
+              return;
+            }
+          } else {
+            alert("Could not remove 2FA: " + unenrollErr.message);
+            setDisablingMfa(false);
+            return;
           }
         }
       }
+
+      // Also clean up any lingering factors
+      for (const f of allTotp) {
+        if (f.id !== targetFactor?.id) {
+          await supabase.auth.mfa.unenroll({ factorId: f.id }).catch(() => {});
+        }
+      }
+
       setActiveMfaFactor(null);
       setMfaStatus("disabled");
+      alert("✅ Authenticator device removed successfully. 2FA is now disabled for your account.");
       await checkMfaStatus();
     } catch (err) {
       alert("Failed to unenroll 2FA: " + err.message);
@@ -917,22 +956,32 @@ export default function CompanySettings({
                 </p>
               </div>
 
-              <div className="pt-2">
+              <div className="pt-2 flex items-center gap-2 flex-wrap">
                 {mfaStatus === "enabled" ? (
-                  <button
-                    type="button"
-                    onClick={handleDisableMfa}
-                    disabled={disablingMfa}
-                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-500/10 hover:border-rose-500/40 hover:text-rose-300 disabled:opacity-50 text-slate-300 text-xs font-medium border border-slate-700 transition-all flex items-center gap-1.5"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{disablingMfa ? "Removing..." : "Reconfigure / Remove Authenticator"}</span>
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleDisableMfa}
+                      disabled={disablingMfa}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-500/10 hover:border-rose-500/40 hover:text-rose-300 disabled:opacity-50 text-slate-300 text-xs font-medium border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-slate-400" />
+                      <span>{disablingMfa ? "Removing..." : "Remove Authenticator"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowMfaEnroll(true)}
+                      className="px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Smartphone className="w-3.5 h-3.5" />
+                      <span>Scan New QR Code</span>
+                    </button>
+                  </>
                 ) : (
                   <button
                     type="button"
                     onClick={() => setShowMfaEnroll(true)}
-                    className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5"
+                    className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <Smartphone className="w-3.5 h-3.5" />
                     <span>Setup Authenticator App (QR Code)</span>
@@ -962,15 +1011,24 @@ export default function CompanySettings({
                   type="button"
                   onClick={handleToggleEnforceMfa}
                   disabled={savingMfaPolicy}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                    form.enforce_mfa ? "bg-indigo-600" : "bg-slate-700"
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 border transition-all cursor-pointer ${
+                    form.enforce_mfa 
+                      ? "bg-indigo-600/20 text-indigo-300 border-indigo-500/50 hover:bg-indigo-600/30"
+                      : "bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200"
                   }`}
+                  title={form.enforce_mfa ? "Click to disable company-wide MFA enforcement" : "Click to enforce 2FA for all staff members"}
                 >
-                  <span
-                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-                      form.enforce_mfa ? "translate-x-4" : "translate-x-1"
-                    }`}
-                  />
+                  {form.enforce_mfa ? (
+                    <>
+                      <ToggleRight className="w-5 h-5 text-indigo-400 shrink-0" />
+                      <span>Enforced (ON)</span>
+                    </>
+                  ) : (
+                    <>
+                      <ToggleLeft className="w-5 h-5 text-slate-500 shrink-0" />
+                      <span>Disabled (OFF)</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
