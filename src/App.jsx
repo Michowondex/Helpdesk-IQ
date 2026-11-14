@@ -361,6 +361,10 @@ export default function HelpdeskAI() {
           delete sanitizedOrg.resend_api_key;
           delete sanitizedOrg.smtp_pass;
         }
+        // Ensure Master Org (bizadoc.com) always has enable_global_kb = true
+        if (sanitizedOrg.is_master_org || sanitizedOrg.domain === PLATFORM_MASTER_DOMAIN || sanitizedOrg.support_email?.includes(PLATFORM_MASTER_DOMAIN)) {
+          sanitizedOrg.enable_global_kb = true;
+        }
         setOrgConfig(sanitizedOrg);
       }
 
@@ -505,18 +509,23 @@ export default function HelpdeskAI() {
           user.user_metadata?.account_type === "individual";
         const hasCompany = Boolean(user.user_metadata?.company_name);
 
-        // 1. Existing Platform Owner Healing: Ensure bound to Master Org as admin
+        // 1. Existing Platform Owner Healing: Ensure bound to Master Org as admin & KB permanently active
         if (isMasterOwner) {
-          const { data: masterOrg } = await supabase.from("organizations").select("id").eq("is_master_org", true).maybeSingle();
-          if (masterOrg?.id && (data.org_id !== masterOrg.id || data.role !== "admin" || data.account_type !== "business")) {
-            await supabase.from("profiles").update({ 
-              org_id: masterOrg.id, 
-              role: "admin", 
-              account_type: "business" 
-            }).eq("id", user.id);
-            data.org_id = masterOrg.id;
-            data.role = "admin";
-            data.account_type = "business";
+          const { data: masterOrg } = await supabase.from("organizations").select("id, enable_global_kb").eq("is_master_org", true).maybeSingle();
+          if (masterOrg?.id) {
+            if (!masterOrg.enable_global_kb) {
+              await supabase.from("organizations").update({ enable_global_kb: true }).eq("id", masterOrg.id);
+            }
+            if (data.org_id !== masterOrg.id || data.role !== "admin" || data.account_type !== "business") {
+              await supabase.from("profiles").update({ 
+                org_id: masterOrg.id, 
+                role: "admin", 
+                account_type: "business" 
+              }).eq("id", user.id);
+              data.org_id = masterOrg.id;
+              data.role = "admin";
+              data.account_type = "business";
+            }
           }
         } 
         // 2. Existing Public Individual Healing: Ensure bound to Master Org as user
@@ -636,7 +645,7 @@ export default function HelpdeskAI() {
               allstaff_email: accountType === "business" ? `all-staff@${userDomain}` : user.email,
               incident_sla_minutes: 10,
               ticket_sla_hours: 1,
-              enable_global_kb: accountType === "individual" ? true : false,
+              enable_global_kb: (accountType === "individual" || userDomain === PLATFORM_MASTER_DOMAIN) ? true : false,
               workspace_mode: workspaceMode,
               portal_slug: rawSlug,
               remote_fee: 3500,
@@ -2177,7 +2186,11 @@ export default function HelpdeskAI() {
             incidents={incidents}
             services={services}
             customArticles={customArticles}
-            orgConfig={isIndividualAccount ? { ...orgConfig, enable_global_kb: true } : orgConfig}
+            orgConfig={
+              (isIndividualAccount || isMasterOwner || orgConfig?.is_master_org) 
+                ? { ...orgConfig, enable_global_kb: true } 
+                : orgConfig
+            }
             userRole={userRole}
             accountType={
               currentUserProfile?.account_type ||

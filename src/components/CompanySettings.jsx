@@ -21,6 +21,13 @@ export default function CompanySettings({
   onSaveArticle,
   onDeleteArticle
 }) {
+  const isMasterPlatformOrg = Boolean(
+    orgConfig?.is_master_org || 
+    orgConfig?.domain === "bizadoc.com" || 
+    orgConfig?.support_email?.includes("bizadoc.com") || 
+    currentUser?.email?.toLowerCase().endsWith("@bizadoc.com")
+  );
+
   const [form, setForm] = useState({
     name: orgConfig?.name || "Primary Organization",
     support_phone: orgConfig?.support_phone || "+234 800 000 0000",
@@ -31,7 +38,7 @@ export default function CompanySettings({
     incident_sla_minutes: orgConfig?.incident_sla_minutes || 10,
     ticket_sla_hours: orgConfig?.ticket_sla_hours || 1,
     vpn_gateway: orgConfig?.vpn_gateway || "vpn.company.com",
-    enable_global_kb: orgConfig?.enable_global_kb === true,
+    enable_global_kb: isMasterPlatformOrg ? true : (orgConfig?.enable_global_kb === true),
     enforce_mfa: orgConfig?.enforce_mfa === true,
     portal_slug: orgConfig?.portal_slug || "",
     remote_fee: orgConfig?.remote_fee !== undefined ? orgConfig.remote_fee : 3500,
@@ -151,7 +158,7 @@ export default function CompanySettings({
         incident_sla_minutes: orgConfig.incident_sla_minutes || prev.incident_sla_minutes,
         ticket_sla_hours: orgConfig.ticket_sla_hours || prev.ticket_sla_hours,
         vpn_gateway: orgConfig.vpn_gateway || prev.vpn_gateway,
-        enable_global_kb: orgConfig.enable_global_kb !== undefined ? orgConfig.enable_global_kb : prev.enable_global_kb,
+        enable_global_kb: isMasterPlatformOrg ? true : (orgConfig.enable_global_kb !== undefined ? orgConfig.enable_global_kb : prev.enable_global_kb),
         enforce_mfa: orgConfig.enforce_mfa !== undefined ? orgConfig.enforce_mfa : prev.enforce_mfa,
         portal_slug: orgConfig.portal_slug !== undefined ? orgConfig.portal_slug : prev.portal_slug,
         remote_fee: orgConfig.remote_fee !== undefined ? orgConfig.remote_fee : prev.remote_fee,
@@ -912,28 +919,42 @@ export default function CompanySettings({
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-slate-200">Include 36 Global Baseline IT Articles</span>
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider border ${form.enable_global_kb ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-amber-500/10 text-amber-400 border-amber-500/20"}`}>
-                    {form.enable_global_kb ? "Enabled" : "Strict Tenant Mode"}
-                  </span>
+                  {isMasterPlatformOrg ? (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider border bg-indigo-500/10 text-indigo-400 border-indigo-500/20">
+                      Master Platform Core (Always Active)
+                    </span>
+                  ) : (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider border ${form.enable_global_kb ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-amber-500/10 text-amber-400 border-amber-500/20"}`}>
+                      {form.enable_global_kb ? "Enabled" : "Strict Tenant Mode"}
+                    </span>
+                  )}
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  {form.enable_global_kb 
-                    ? "Virtual Assistant checks custom articles first, then falls back to 36 standard IT guides." 
-                    : "Strict Mode Active: Virtual Assistant will strictly match your company's custom articles only."}
+                  {isMasterPlatformOrg
+                    ? "As the Master Platform Workspace, all 36 global IT support guides and custom articles are permanently active for your technicians and linked clients."
+                    : form.enable_global_kb 
+                      ? "Virtual Assistant checks custom articles first, then falls back to 36 standard IT guides." 
+                      : "Strict Mode Active: Virtual Assistant will strictly match your company's custom articles only."}
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setForm(prev => ({ ...prev, enable_global_kb: !prev.enable_global_kb }))}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all self-start sm:self-auto border ${form.enable_global_kb ? "bg-indigo-600/20 border-indigo-500/40 text-indigo-300 hover:bg-indigo-600/30" : "bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200"}`}
-            >
-              {form.enable_global_kb ? (
-                <><ToggleRight className="w-4 h-4 text-indigo-400" /> Active</>
-              ) : (
-                <><ToggleLeft className="w-4 h-4 text-slate-500" /> Disabled</>
-              )}
-            </button>
+            {isMasterPlatformOrg ? (
+              <span className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border bg-indigo-600/20 border-indigo-500/40 text-indigo-300 self-start sm:self-auto">
+                <ToggleRight className="w-4 h-4 text-indigo-400" /> Always Active
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setForm(prev => ({ ...prev, enable_global_kb: !prev.enable_global_kb }))}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all self-start sm:self-auto border ${form.enable_global_kb ? "bg-indigo-600/20 border-indigo-500/40 text-indigo-300 hover:bg-indigo-600/30" : "bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200"}`}
+              >
+                {form.enable_global_kb ? (
+                  <><ToggleRight className="w-4 h-4 text-indigo-400" /> Active</>
+                ) : (
+                  <><ToggleLeft className="w-4 h-4 text-slate-500" /> Disabled</>
+                )}
+              </button>
+            )}
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
