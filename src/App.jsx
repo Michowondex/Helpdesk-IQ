@@ -178,7 +178,18 @@ export default function HelpdeskAI() {
   const [portalSlug] = useState(() => {
     if (typeof window === "undefined") return null;
     const params = new URLSearchParams(window.location.search);
-    return params.get("portal") || null;
+    const slugFromUrl = params.get("portal");
+    if (slugFromUrl) {
+      try {
+        sessionStorage.setItem("bizadesk_active_portal", slugFromUrl);
+      } catch (_) {}
+      return slugFromUrl;
+    }
+    try {
+      return sessionStorage.getItem("bizadesk_active_portal") || null;
+    } catch (_) {
+      return null;
+    }
   });
   const [portalOrg, setPortalOrg] = useState(null);
   const [portalLoading, setPortalLoading] = useState(Boolean(portalSlug));
@@ -273,6 +284,7 @@ export default function HelpdeskAI() {
   const [cpLoading, setCpLoading] = useState(false);
   const [cpError, setCpError] = useState("");
   const [cpSuccess, setCpSuccess] = useState("");
+  const [corporateBlockNotice, setCorporateBlockNotice] = useState(null); // { companyName, domain }
 
   const showBanner = (msg, color = "#6366f1") => {
     setAlertBanner({ msg, color });
@@ -562,6 +574,44 @@ export default function HelpdeskAI() {
         if (isConsumer && !isMasterOwner) {
           accountType = "individual";
           companyName = null;
+        }
+
+        // Check if user domain belongs to an already-registered corporate workspace
+        if (!isConsumer && !isMasterOwner) {
+          const { data: existingCorpOrg } = await supabase
+            .from("organizations")
+            .select("id, name, domain")
+            .eq("domain", userDomain)
+            .maybeSingle();
+
+          if (existingCorpOrg) {
+            // Company is already registered on BizaDesk!
+            // Security Rule: Subsequent users cannot self-register as admin or create rogue orgs.
+            // They MUST be invited / created by the Admin first in TeamManagement.
+            const { data: preCreatedProfile } = await supabase
+              .from("profiles")
+              .select("*")
+              .eq("email", user.email.toLowerCase().trim())
+              .maybeSingle();
+
+            if (!preCreatedProfile) {
+              // User has NOT been invited or pre-created by the company Admin!
+              // Block login, sign out, and display corporate security invitation requirement.
+              await supabase.auth.signOut();
+              setCurrentUser(null);
+              setCurrentUserProfile(null);
+              setCorporateBlockNotice({
+                companyName: existingCorpOrg.name,
+                domain: userDomain
+              });
+              setLoading(false);
+              return;
+            } else {
+              // User was invited by Admin! Bind them securely to their company org
+              targetOrgId = existingCorpOrg.id;
+              accountType = "business";
+            }
+          }
         }
 
         // If the user signed up as a public individual (no business / enterprise company name)
@@ -1756,6 +1806,40 @@ export default function HelpdeskAI() {
   }
 
   if (!currentUser) {
+    // ── Corporate Member Block Notice (Admin Invitation Required) ──
+    if (corporateBlockNotice) {
+      return (
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-center">
+          <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-slate-100">Administrator Invitation Required</h2>
+              <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                The corporate workspace for <strong className="text-slate-200">{corporateBlockNotice.companyName}</strong> (<span className="text-indigo-400 font-mono">@{corporateBlockNotice.domain}</span>) is already registered on BizaDesk.
+              </p>
+            </div>
+            <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 text-left text-xs space-y-2 text-slate-300">
+              <p className="font-semibold text-slate-400 uppercase tracking-wider text-[10px]">Company Security Policy:</p>
+              <p>• To protect corporate IT systems, new members cannot self-register under this domain.</p>
+              <p>• Please contact your company's IT Administrator to add or invite your email before signing in.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setCorporateBlockNotice(null);
+                setShowAuthScreen(false);
+              }}
+              className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs transition-colors shadow-lg shadow-indigo-950"
+            >
+              Back to Home
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     if (portalLoading) {
       return (
         <div className="min-h-screen bg-slate-950 flex items-center justify-center text-indigo-400 font-sans text-xs tracking-wider">
