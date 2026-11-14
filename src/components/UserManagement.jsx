@@ -120,31 +120,29 @@ export default function UserManagement({ orgId, orgConfig, teams = [] }) {
       // The invited user signs in later (Google OAuth or email link),
       // and App.jsx fetchProfile() will claim & link this profile row
       // to their auth.uid automatically.
-      const { error: profileErr } = await supabase.from("profiles").upsert({
+      const newMemberPayload = {
         id: profileId,
-        org_id: orgId || null,          // ← Ties member to this company's org
+        org_id: orgId || null,
         full_name: fullName.trim(),
         email: targetEmail,
         role: role,
         department: assignedDept,
         account_type: "business",
-        is_active: true,
-        invited_by_admin: true          // ← Flag: pre-provisioned by admin
-      }, { onConflict: "email" });      // ← If email exists, update record
+        is_active: true
+      };
+
+      const { error: profileErr } = await supabase
+        .from("profiles")
+        .upsert(newMemberPayload, { onConflict: "email" });
 
       if (profileErr) {
-        // Fallback: try insert with new UUID if conflict was on id
-        const { error: insertErr } = await supabase.from("profiles").insert({
-          id: crypto.randomUUID(),
-          org_id: orgId || null,
-          full_name: fullName.trim(),
-          email: targetEmail,
-          role: role,
-          department: assignedDept,
-          account_type: "business",
-          is_active: true,
-          invited_by_admin: true
-        });
+        // Fallback: try direct insert with a fresh UUID if conflict was on id
+        const { error: insertErr } = await supabase
+          .from("profiles")
+          .insert({
+            ...newMemberPayload,
+            id: crypto.randomUUID()
+          });
         if (insertErr && !insertErr.message?.includes("duplicate") && !insertErr.message?.includes("unique")) {
           throw insertErr;
         }
