@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Activity, Plus, RefreshCw, CheckCircle2, AlertTriangle, XCircle, Trash2, X, ChevronDown, ChevronUp, GitBranch, Zap, Clock, Globe, ShieldAlert } from "lucide-react";
+import { Activity, Plus, RefreshCw, CheckCircle2, AlertTriangle, XCircle, Trash2, X, ChevronDown, ChevronUp, GitBranch, Zap, Clock, Globe, ShieldAlert, Loader2, AlertCircle } from "lucide-react";
 import { pingEndpoint } from "../engine/healthPingEngine";
 import { supabase } from "../supabase";
 
@@ -59,6 +59,8 @@ export default function MonitoredServices({
   const [pingingId, setPingingId] = useState(null);
   const [showRouting, setShowRouting] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [validationError, setValidationError] = useState("");
 
   const [form, setForm] = useState({
     name: "",
@@ -230,35 +232,57 @@ export default function MonitoredServices({
   // ── Add new monitored service ────────────────────────────────────────────────
   const handleAddSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name.trim()) return;
+    setValidationError("");
+    if (!form.name.trim() || submitting) return;
 
-    const rules = {};
-    Object.entries(routingRules).forEach(([k, v]) => { if (v) rules[k] = v; });
+    const trimmedName = form.name.trim().toLowerCase();
+    const trimmedUrl = form.health_url.trim().toLowerCase();
 
-    const defaultTeamId = rules.default || Object.values(rules)[0] || null;
-    const defaultTeamObj = teams.find(t => t.id === defaultTeamId);
+    // Guard against duplicate applications
+    const isDuplicate = services.some(s => 
+      (s.name && s.name.trim().toLowerCase() === trimmedName) ||
+      (trimmedUrl && s.health_url && s.health_url.trim().toLowerCase() === trimmedUrl)
+    );
 
-    const ping = await pingEndpoint(form.health_url.trim());
-
-    if (onAddService) {
-      await onAddService({
-        name: form.name.trim(),
-        health_url: form.health_url.trim() || null,
-        check_interval_seconds: Number(form.check_interval_seconds) || 60,
-        health_alert_threshold: Number(form.health_alert_threshold) || 70,
-        routing_rules: Object.keys(rules).length > 0 ? rules : null,
-        responsible_team: defaultTeamObj?.team_name || "General IT",
-        health_pct: ping.health_pct,
-        status: ping.status,
-        latency_ms: ping.latency,
-        last_checked_at: ping.checked_at
-      });
+    if (isDuplicate) {
+      setValidationError("An application with this name or health check URL is already being monitored.");
+      return;
     }
 
-    setForm({ name: "", health_url: "", check_interval_seconds: 60, health_alert_threshold: 70 });
-    setRoutingRules({ connection_refused: "", http_5xx: "", body_db_keyword: "", slow_response: "", http_4xx: "", default: "" });
-    setShowRouting(false);
-    setShowAddModal(false);
+    setSubmitting(true);
+    try {
+      const rules = {};
+      Object.entries(routingRules).forEach(([k, v]) => { if (v) rules[k] = v; });
+
+      const defaultTeamId = rules.default || Object.values(rules)[0] || null;
+      const defaultTeamObj = teams.find(t => t.id === defaultTeamId);
+
+      const ping = await pingEndpoint(form.health_url.trim());
+
+      if (onAddService) {
+        await onAddService({
+          name: form.name.trim(),
+          health_url: form.health_url.trim() || null,
+          check_interval_seconds: Number(form.check_interval_seconds) || 60,
+          health_alert_threshold: Number(form.health_alert_threshold) || 70,
+          routing_rules: Object.keys(rules).length > 0 ? rules : null,
+          responsible_team: defaultTeamObj?.team_name || "General IT",
+          health_pct: ping.health_pct,
+          status: ping.status,
+          latency_ms: ping.latency,
+          last_checked_at: ping.checked_at
+        });
+      }
+
+      setForm({ name: "", health_url: "", check_interval_seconds: 60, health_alert_threshold: 70 });
+      setRoutingRules({ connection_refused: "", http_5xx: "", body_db_keyword: "", slow_response: "", http_4xx: "", default: "" });
+      setShowRouting(false);
+      setShowAddModal(false);
+    } catch (err) {
+      setValidationError("Failed to add service: " + (err.message || "Unknown error"));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -597,19 +621,38 @@ export default function MonitoredServices({
                 )}
               </div>
 
+              {validationError && (
+                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{validationError}</span>
+                </div>
+              )}
+
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs py-2.5 rounded-lg border border-slate-700"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setValidationError("");
+                  }}
+                  disabled={submitting}
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 text-xs py-2.5 rounded-lg border border-slate-700"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium py-2.5 rounded-lg shadow-lg shadow-indigo-950"
+                  disabled={submitting}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium py-2.5 rounded-lg shadow-lg shadow-indigo-950 flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
                 >
-                  Save & Ping Now
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Pinging & Saving...</span>
+                    </>
+                  ) : (
+                    <span>Save & Ping Now</span>
+                  )}
                 </button>
               </div>
             </form>

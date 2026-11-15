@@ -68,10 +68,26 @@ function fmtTime(ts) {
 
 function timeAgo(ts) {
   if (!ts) return "just now";
-  const d = Date.now() - ts;
+  const num = typeof ts === "number" ? ts : new Date(ts).getTime();
+  if (isNaN(num) || num <= 0) return "just now";
+  const d = Math.max(0, Date.now() - num);
   if (d < 60000) return `${Math.floor(d / 1000)}s ago`;
   if (d < 3600000) return `${Math.floor(d / 60000)}m ago`;
   return `${Math.floor(d / 3600000)}h ago`;
+}
+
+function getIncidentOpenedTime(inc) {
+  if (!inc) return Date.now();
+  if (typeof inc.opened_at === "number" && inc.opened_at > 0) return inc.opened_at;
+  if (inc.opened_at) {
+    const parsed = new Date(inc.opened_at).getTime();
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  if (inc.created_at) {
+    const parsed = new Date(inc.created_at).getTime();
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return Date.now();
 }
 
 function EmailModal({ email, onClose }) {
@@ -1366,15 +1382,17 @@ export default function HelpdeskAI() {
     const check = setInterval(async () => {
       for (const inc of incidents) {
         if (inc.resolved) continue;
-        const age = Date.now() - inc.opened_at;
+        const openedTime = getIncidentOpenedTime(inc);
+        const age = Math.max(0, Date.now() - openedTime);
         const currentTier = inc.escalation_tier || 1;
+        const incCode = inc.incident_code || (inc.id && inc.id.length > 8 ? `INC-${inc.id.slice(0, 6).toUpperCase()}` : inc.id);
 
         // ── Tier 2 Escalation (at 15 mins) ──────────────────────────────────
         if (age >= tier2ThresholdMs && currentTier < 2) {
           const emailData = buildEmail(inc, "manager_escalation");
           if (emailData) await saveEmail(emailData);
           await supabase.from("incidents").update({ escalation_tier: 2, status: "TIER2_ESCALATED" }).eq("id", inc.id);
-          showBanner(`⚠️ Tier 2 Escalation: ${inc.id} escalated to IT Manager`, "#f97316");
+          showBanner(`⚠️ Tier 2 Escalation: Incident ${incCode} (${inc.title}) escalated to IT Manager`, "#f97316");
           loadData();
           continue;
         }
@@ -1390,7 +1408,7 @@ export default function HelpdeskAI() {
             status: isCritical ? "CRITICAL_ALL_STAFF_ESCALATED" : "TIER3_EXECUTIVE_ESCALATED" 
           }).eq("id", inc.id);
 
-          showBanner(`🚨 Tier 3 Escalation: ${inc.id} (${isCritical ? "All-Staff Notified" : "Executive Notified"})`, "#ef4444");
+          showBanner(`🚨 Tier 3 Escalation: Incident ${incCode} (${inc.title}) escalated (${isCritical ? "All-Staff Notified" : "Executive Notified"})`, "#ef4444");
           loadData();
         }
       }
@@ -2308,6 +2326,29 @@ export default function HelpdeskAI() {
 
   const handleAddService = async (serviceData) => {
     try {
+      const trimmedName = (serviceData.name || "").trim().toLowerCase();
+      const trimmedUrl = (serviceData.health_url || "").trim().toLowerCase();
+
+      // Check if this service name or URL is already in state
+      const existing = services.find(s => 
+        (s.name && s.name.trim().toLowerCase() === trimmedName) ||
+        (trimmedUrl && s.health_url && s.health_url.trim().toLowerCase() === trimmedUrl)
+      );
+
+      if (existing && existing.id) {
+        // Update existing entry instead of creating a duplicate
+        const { data, error } = await supabase.from("monitored_services").update({
+          ...serviceData,
+          org_id: orgConfig?.id || currentUserProfile?.org_id || null
+        }).eq("id", existing.id).select().single();
+
+        if (!error && data) {
+          setServices(prev => prev.map(s => s.id === existing.id ? data : s));
+          showBanner(`Monitored app "${serviceData.name}" updated!`, "#22c55e");
+        }
+        return;
+      }
+
       const { data, error } = await supabase.from("monitored_services").insert({
         ...serviceData,
         org_id: orgConfig?.id || currentUserProfile?.org_id || null
@@ -2954,7 +2995,8 @@ export default function HelpdeskAI() {
                 </div>
               ) : (
                 incidents.map(inc => {
-                  const age = Math.floor((Date.now() - inc.opened_at) / 60000);
+                  const openedTime = getIncidentOpenedTime(inc);
+                  const age = Math.max(0, Math.floor((Date.now() - openedTime) / 60000));
                   const isResolved = inc.resolved;
 
                   return (
@@ -2994,7 +3036,7 @@ export default function HelpdeskAI() {
                           </div>
                           <h3 className="text-sm font-semibold text-slate-100">{inc.title}</h3>
                           <p className="text-xs text-slate-400 mt-1">
-                            App: <strong className="text-slate-300">{inc.app}</strong> • Team: <strong className="text-slate-300">{inc.team}</strong> • Opened: {timeAgo(inc.opened_at)} ({age}m ago)
+                            App: <strong className="text-slate-300">{inc.app || "Global"}</strong> • Team: <strong className="text-slate-300">{inc.team}</strong> • Opened: {timeAgo(openedTime)} ({age}m ago)
                           </p>
                           {inc.description && (
                             <p className="text-xs text-slate-400 mt-2 bg-slate-950 p-2.5 rounded border border-slate-800/80">
