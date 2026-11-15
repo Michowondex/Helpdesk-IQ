@@ -90,6 +90,20 @@ function getIncidentOpenedTime(inc) {
   return Date.now();
 }
 
+function getTicketCreatedTime(t) {
+  if (!t) return Date.now();
+  if (typeof t.created === "number" && t.created > 0) return t.created;
+  if (t.created) {
+    const parsed = new Date(t.created).getTime();
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  if (t.created_at) {
+    const parsed = new Date(t.created_at).getTime();
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return Date.now();
+}
+
 function EmailModal({ email, onClose }) {
   if (!email) return null;
   return (
@@ -133,7 +147,7 @@ function TicketSlaBar({ ticket, slaHours = 1, orgConfig = null }) {
   const workDays = orgConfig?.work_days || "1,2,3,4,5";
 
   const slaData = calculateBusinessSla({
-    createdTimestamp: ticket.created,
+    createdTimestamp: getTicketCreatedTime(ticket),
     slaHours,
     workStartHour: startHour,
     workEndHour: endHour,
@@ -143,7 +157,8 @@ function TicketSlaBar({ ticket, slaHours = 1, orgConfig = null }) {
   });
 
   if (isResolved) {
-    const totalMins = Math.max(1, Math.round((slaData.businessElapsedMs || (Date.now() - ticket.created)) / 60000));
+    const tCreated = getTicketCreatedTime(ticket);
+    const totalMins = Math.max(1, Math.round((slaData.businessElapsedMs || (Date.now() - tCreated)) / 60000));
     return (
       <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-medium mt-2">
         <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
@@ -1422,7 +1437,10 @@ export default function HelpdeskAI() {
     const check = setInterval(async () => {
       for (const t of tickets) {
         if (t.status === "RESOLVED" || t.sla_breached) continue;
-        if (Date.now() - t.created >= ticketThresholdMs) {
+        const ticketCreated = getTicketCreatedTime(t);
+        const ticketAge = Math.max(0, Date.now() - ticketCreated);
+        if (ticketAge >= ticketThresholdMs) {
+          const tktCode = t.ticket_code || (t.id && t.id.length > 8 ? `TKT-${t.id.slice(0, 6).toUpperCase()}` : t.id);
           await supabase.from("tickets").update({ 
             sla_breached: true,
             breached_at: Date.now()
@@ -1433,11 +1451,11 @@ export default function HelpdeskAI() {
               org_id: t.org_id || orgConfig?.id,
               user_name: t.assignee_name || "Unassigned",
               action: "SLA_BREACHED",
-              details: `Ticket ${t.id} breached SLA (${orgConfig.ticket_sla_hours || 1}h target) in queue "${t.team}". Assigned technician: ${t.assignee_name}`
+              details: `Ticket ${tktCode} breached SLA (${orgConfig.ticket_sla_hours || 1}h target) in queue "${t.team}". Assigned technician: ${t.assignee_name}`
             });
           } catch (_) {}
 
-          showBanner(`⚠️ SLA BREACHED — Ticket ${t.id} open over ${orgConfig.ticket_sla_hours || 1} hour(s)!`, "#f97316");
+          showBanner(`⚠️ SLA BREACHED — Ticket ${tktCode} open over ${orgConfig.ticket_sla_hours || 1} hour(s)!`, "#f97316");
           loadData();
         }
       }
@@ -3124,8 +3142,9 @@ export default function HelpdeskAI() {
           const avgTicketMttrMins = resolvedTickets.length > 0
             ? Math.round(
                 resolvedTickets.reduce((acc, t) => {
-                  const resolvedTime = t.resolved_at || t.last_update || t.created || Date.now();
-                  return acc + Math.max(1, (resolvedTime - (t.created || resolvedTime)) / 60000);
+                  const tCreated = getTicketCreatedTime(t);
+                  const resolvedTime = t.resolved_at || t.last_update || tCreated;
+                  return acc + Math.max(1, (resolvedTime - tCreated) / 60000);
                 }, 0) / resolvedTickets.length
               )
             : null;
@@ -3160,7 +3179,7 @@ export default function HelpdeskAI() {
 
             // 3. Date filter
             if (ticketDateFilter !== "ALL") {
-              const ticketTime = t.created || 0;
+              const ticketTime = getTicketCreatedTime(t);
               const now = Date.now();
               if (ticketDateFilter === "TODAY" && now - ticketTime > 86400000) return false;
               if (ticketDateFilter === "7DAYS" && now - ticketTime > 7 * 86400000) return false;
@@ -3374,7 +3393,7 @@ export default function HelpdeskAI() {
                           </div>
                           <h3 className="text-sm font-semibold text-slate-100">{t.title}</h3>
                           <p className="text-xs text-slate-400 mt-0.5">
-                            Assigned to: <strong className="text-indigo-300">{t.assignee_name || t.team}</strong> ({t.team}) • Submitter: <strong className="text-slate-300">{t.submitter || "Staff"}</strong> • Created: {new Date(t.created).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })} ({timeAgo(t.created)})
+                            Assigned to: <strong className="text-indigo-300">{t.assignee_name || t.team}</strong> ({t.team}) • Submitter: <strong className="text-slate-300">{t.submitter || "Staff"}</strong> • Created: {new Date(getTicketCreatedTime(t)).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })} ({timeAgo(getTicketCreatedTime(t))})
                           </p>
                           {t.description && (
                             <p className="text-xs text-slate-400 mt-2 bg-slate-950 p-2.5 rounded border border-slate-800/80 whitespace-pre-wrap">
