@@ -71,6 +71,15 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
   const emailDomain = email.split("@")[1]?.toLowerCase()?.trim();
   const showBusinessDomainWarning = isSignUp && accountType === "business" && email.includes("@") && emailDomain && isConsumerEmail(email);
 
+  // Safe redirect URL for OAuth & Resets: always stays on localhost in local dev
+  const getAuthRedirectUrl = () => {
+    if (typeof window !== "undefined") {
+      const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      if (isLocal) return window.location.origin;
+    }
+    return import.meta.env.VITE_APP_URL || (typeof window !== "undefined" ? window.location.origin : "");
+  };
+
   const handleGoogleSignIn = async () => {
     setErrorMsg("");
     setInfoMsg("");
@@ -92,7 +101,7 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
         } catch (_) {}
       }
 
-      const redirectUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+      const redirectUrl = getAuthRedirectUrl();
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -116,7 +125,7 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
     setDuplicateBlockMsg("");
     setLoading(true);
     try {
-      const redirectUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+      const redirectUrl = getAuthRedirectUrl();
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: redirectUrl,
       });
@@ -222,7 +231,7 @@ export default function AuthScreen({ onAuthSuccess, onBackToLanding }) {
           ? companyName.trim() 
           : `${fullName.trim() || cleanEmail.split("@")[0]}'s Workspace`;
 
-        const redirectUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+        const redirectUrl = getAuthRedirectUrl();
 
         const { data, error } = await supabase.auth.signUp({
           email: cleanEmail,

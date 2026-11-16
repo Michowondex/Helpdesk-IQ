@@ -45,14 +45,19 @@ const MfaEnrollModal = lazy(() => import("./components/MfaEnrollModal"));
 const PLATFORM_MASTER_DOMAIN = "bizadoc.com";
 
 // ── Whitelisted Testing Accounts for Business Workspace Testing ──────────────
-const TEST_ENTERPRISE_EMAIL = "michaelakinbiyi6805@gmail.com";
-const TEST_COMMERCIAL_EMAIL = "mabelsclothing6805@gmail.com";
+const TEST_ENTERPRISE_EMAILS = [
+  "michaelakinbiyi6805@gmail.com",
+  "michaelakinbiyi@gmail.com"
+];
+const TEST_COMMERCIAL_EMAILS = [
+  "mabelsclothing6805@gmail.com"
+];
 
 function getPermittedTestWorkspaceMode(email) {
   if (!email || typeof email !== "string") return null;
   const em = email.toLowerCase().trim();
-  if (em === TEST_ENTERPRISE_EMAIL) return "ENTERPRISE";
-  if (em === TEST_COMMERCIAL_EMAIL) return "COMMERCIAL";
+  if (TEST_ENTERPRISE_EMAILS.includes(em)) return "ENTERPRISE";
+  if (TEST_COMMERCIAL_EMAILS.includes(em)) return "COMMERCIAL";
   return null;
 }
 
@@ -683,7 +688,8 @@ export default function HelpdeskAI() {
             data.role = "admin";
             data.account_type = "business";
           }
-          if (data.org_id) {
+          const mId = masterOrgId || "474fbf5e-71bd-4656-9632-eb7d9fb559ad";
+          if (data.org_id && data.org_id !== mId) {
             await supabase.from("organizations").update({ 
               workspace_mode: testBusinessMode 
             }).eq("id", data.org_id);
@@ -2819,9 +2825,13 @@ export default function HelpdeskAI() {
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
                     Personal IT
                   </span>
-                ) : (isMasterOwner || orgConfig?.is_master_org) ? (
+                ) : (isMasterOwner && userRole === "admin") ? (
                   <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
                     Platform Owner
+                  </span>
+                ) : (isMasterOwner || orgConfig?.is_master_org) ? (
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400/90 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                    Platform Team
                   </span>
                 ) : orgConfig?.workspace_mode === "COMMERCIAL" ? (
                   <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
@@ -2830,6 +2840,16 @@ export default function HelpdeskAI() {
                 ) : (
                   <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
                     Enterprise
+                  </span>
+                )}
+                {!isIndividualAccount && userRole === "technician" && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20">
+                    Technician
+                  </span>
+                )}
+                {!isIndividualAccount && userRole === "user" && (
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-slate-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                    Staff
                   </span>
                 )}
               </div>
