@@ -167,32 +167,57 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
       const assignedDept = department || (teams[0]?.team_name || "General IT");
       const targetOrgId = orgId || orgConfig?.id || null;
 
-      // ── Clean Multi-Tenant Organization Invitation ─────────────────────────
-      const invPayload = {
-        org_id: targetOrgId,
-        email: targetEmail,
-        role: role,
-        department: assignedDept,
-        status: "pending"
-      };
-      if (fullName.trim()) {
-        invPayload.full_name = fullName.trim();
+      // ── Step 1: Direct Provision via Edge Function (creates real Auth user with password) ──
+      let provisionedViaApi = false;
+      try {
+        const { data: provData, error: provErr } = await supabase.functions.invoke("provision-member", {
+          body: {
+            org_id: targetOrgId,
+            email: targetEmail,
+            password: tempPass,
+            full_name: fullName.trim(),
+            role: role,
+            department: assignedDept
+          }
+        });
+
+        if (!provErr && provData?.success) {
+          provisionedViaApi = true;
+        } else if (provErr) {
+          console.warn("provision-member API notice, using invitation fallback:", provErr);
+        }
+      } catch (err) {
+        console.warn("Edge function invocation failed:", err);
       }
 
-      let { error: invErr } = await supabase
-        .from("organization_invitations")
-        .insert(invPayload);
+      // ── Step 2: Fallback to organization_invitations if direct-provisioning was skipped ──
+      if (!provisionedViaApi) {
+        const invPayload = {
+          org_id: targetOrgId,
+          email: targetEmail,
+          role: role,
+          department: assignedDept,
+          status: "pending"
+        };
+        if (fullName.trim()) {
+          invPayload.full_name = fullName.trim();
+        }
 
-      // Resilient schema fallback: if full_name column hasn't been added yet in DB, retry without it
-      if (invErr && invErr.message?.includes("full_name")) {
-        delete invPayload.full_name;
-        const retry = await supabase
+        let { error: invErr } = await supabase
           .from("organization_invitations")
           .insert(invPayload);
-        invErr = retry.error;
-      }
 
-      if (invErr) throw invErr;
+        // Resilient schema fallback: if full_name column hasn't been added yet in DB, retry without it
+        if (invErr && invErr.message?.includes("full_name")) {
+          delete invPayload.full_name;
+          const retry = await supabase
+            .from("organization_invitations")
+            .insert(invPayload);
+          invErr = retry.error;
+        }
+
+        if (invErr) throw invErr;
+      }
 
       setCreatedUserNotice({
         name: fullName.trim(),
@@ -201,7 +226,7 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
         role: ROLE_BADGES[role].label
       });
 
-      notify(`✓ ${fullName} invited as ${ROLE_BADGES[role].label} — they can now sign in with Google or request a password reset.`);
+      notify(`✓ ${fullName} created as ${ROLE_BADGES[role].label} — temporary credentials active for immediate login.`);
       setFullName("");
       setUsername("");
       setCustomEmail("");

@@ -275,6 +275,7 @@ export default function HelpdeskAI() {
   const [currentUser, setCurrentUser] = useState(null);
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [showBreakMenu, setShowBreakMenu] = useState(false);
   // Platform Master Workspace ID (resolved once on login for individual users)
   const [masterOrgId, setMasterOrgId] = useState(null);
 
@@ -1827,9 +1828,22 @@ export default function HelpdeskAI() {
 
   // ── Technician Timed Break Handlers (Anti-Dodge Guardrails) ──────────────────
   const handleStartBreak = async (breakType, durationMinutes) => {
-    if (!currentUserProfile?.id) return;
+    const targetUserId = currentUserProfile?.id || currentUser?.id;
+    if (!targetUserId) return;
     const now = Date.now();
     try {
+      // Optimistic instant response: update UI in 0ms
+      setCurrentUserProfile(prev => ({
+        ...prev,
+        availability_status: "break",
+        is_available: false,
+        break_type: breakType,
+        break_started_at: now,
+        break_duration_minutes: durationMinutes,
+        break_overdue: false
+      }));
+      showBanner(`⏳ Break started (${breakType === "lunch" ? "Lunch" : breakType === "tea" ? "Bio/Tea" : "Meeting"} — ${durationMinutes}m). Ticket auto-routing is paused for you.`, "#f59e0b");
+
       const { error } = await supabase
         .from("profiles")
         .update({
@@ -1840,26 +1854,17 @@ export default function HelpdeskAI() {
           break_duration_minutes: durationMinutes,
           break_overdue: false
         })
-        .eq("id", currentUserProfile.id);
+        .eq("id", targetUserId);
 
       if (!error) {
-        await supabase.from("session_audit_logs").insert({
-          org_id: currentUserProfile.org_id || orgConfig?.id || null,
-          user_name: currentUserProfile.full_name || currentUserProfile.email,
-          action: `Started Break: ${breakType.toUpperCase()} (${durationMinutes}m)`,
-          details: `Technician timed break initiated. Automatically excluded from ticket auto-routing.`
-        });
-
-        setCurrentUserProfile(prev => ({
-          ...prev,
-          availability_status: "break",
-          is_available: false,
-          break_type: breakType,
-          break_started_at: now,
-          break_duration_minutes: durationMinutes,
-          break_overdue: false
-        }));
-        showBanner(`⏳ Break started (${breakType === "lunch" ? "Lunch" : breakType === "tea" ? "Bio/Tea" : "Meeting"} — ${durationMinutes}m). Ticket auto-routing is paused for you.`, "#f59e0b");
+        try {
+          await supabase.from("session_audit_logs").insert({
+            org_id: currentUserProfile?.org_id || orgConfig?.id || null,
+            user_name: currentUserProfile?.full_name || currentUserProfile?.email || "Technician",
+            action: `Started Break: ${breakType.toUpperCase()} (${durationMinutes}m)`,
+            details: `Technician timed break initiated. Automatically excluded from ticket auto-routing.`
+          });
+        } catch (_) {}
       }
     } catch (err) {
       console.error("Failed to start break:", err);
@@ -1867,8 +1872,21 @@ export default function HelpdeskAI() {
   };
 
   const handleEndBreak = async () => {
-    if (!currentUserProfile?.id) return;
+    const targetUserId = currentUserProfile?.id || currentUser?.id;
+    if (!targetUserId) return;
     try {
+      // Optimistic instant response: update UI in 0ms
+      setCurrentUserProfile(prev => ({
+        ...prev,
+        availability_status: "active",
+        is_available: true,
+        break_type: null,
+        break_started_at: null,
+        break_duration_minutes: null,
+        break_overdue: false
+      }));
+      showBanner("🟢 Welcome back! You are now Available and on duty.", "#10b981");
+
       const { error } = await supabase
         .from("profiles")
         .update({
@@ -1879,26 +1897,17 @@ export default function HelpdeskAI() {
           break_duration_minutes: null,
           break_overdue: false
         })
-        .eq("id", currentUserProfile.id);
+        .eq("id", targetUserId);
 
       if (!error) {
-        await supabase.from("session_audit_logs").insert({
-          org_id: currentUserProfile.org_id || orgConfig?.id || null,
-          user_name: currentUserProfile.full_name || currentUserProfile.email,
-          action: `Ended Break: RESUMED DUTY`,
-          details: `Technician returned to active duty. Resumed receiving auto-assigned tickets.`
-        });
-
-        setCurrentUserProfile(prev => ({
-          ...prev,
-          availability_status: "active",
-          is_available: true,
-          break_type: null,
-          break_started_at: null,
-          break_duration_minutes: null,
-          break_overdue: false
-        }));
-        showBanner("🟢 Welcome back! You are now Available and on duty.", "#10b981");
+        try {
+          await supabase.from("session_audit_logs").insert({
+            org_id: currentUserProfile?.org_id || orgConfig?.id || null,
+            user_name: currentUserProfile?.full_name || currentUserProfile?.email || "Technician",
+            action: `Ended Break: RESUMED DUTY`,
+            details: `Technician returned to active duty. Resumed receiving auto-assigned tickets.`
+          });
+        } catch (_) {}
       }
     } catch (err) {
       console.error("Failed to end break:", err);
@@ -2629,7 +2638,7 @@ export default function HelpdeskAI() {
     );
 
   const allNavItems = [
-    { id: "virtual-it", label: "Virtual IT Support", icon: Bot, roles: ["admin", "technician", "user"] },
+    { id: "virtual-it", label: "Virtual IT Support", icon: Bot, roles: ["admin", "user"] },
     { id: "incidents", label: `Incidents ${activeInc.length ? `(${activeInc.length})` : ""}`, icon: Flame, roles: ["admin", "technician"] },
     { 
       id: "tickets", 
@@ -2654,8 +2663,12 @@ export default function HelpdeskAI() {
     : allNavItems.filter(item => item.roles.includes(userRole));
 
   useEffect(() => {
-    if (currentUser && !allowedTabs.find(t => t.id === tab)) {
-      setTab("virtual-it");
+    if (currentUser) {
+      if (!allowedTabs.find(t => t.id === tab)) {
+        setTab(userRole === "technician" ? "tickets" : "virtual-it");
+      } else if (userRole === "technician" && tab === "virtual-it") {
+        setTab("tickets");
+      }
     }
   }, [userRole, isIndividualAccount]);
 
@@ -3072,44 +3085,64 @@ export default function HelpdeskAI() {
               }
 
               return (
-                <div className="relative group">
+                <div className="relative">
                   <button
                     type="button"
+                    onClick={() => setShowBreakMenu(prev => !prev)}
                     className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 text-xs font-medium transition-colors cursor-pointer"
                     title="Take a scheduled break (Lunch, Bio/Tea, Meeting). Pauses incoming ticket assignment."
                   >
                     <Coffee className="w-3.5 h-3.5 text-amber-400" />
                     <span className="text-[11px] font-semibold">Break</span>
+                    <ChevronDown className="w-3 h-3 text-slate-400" />
                   </button>
-                  <div className="absolute right-0 top-full mt-1 w-44 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-1 hidden group-hover:block z-50">
-                    <div className="px-2 py-1 text-[10px] text-slate-400 uppercase font-bold tracking-wider border-b border-slate-800 mb-1">
-                      Schedule Break
+                  {showBreakMenu && (
+                    <div className="absolute right-0 top-full mt-1 w-48 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+                      <div className="px-2 py-1 text-[10px] text-slate-400 uppercase font-bold tracking-wider border-b border-slate-800 mb-1 flex items-center justify-between">
+                        <span>Schedule Break</span>
+                        <button 
+                          type="button" 
+                          onClick={() => setShowBreakMenu(false)} 
+                          className="text-slate-500 hover:text-slate-300"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowBreakMenu(false);
+                          handleStartBreak("lunch", 45);
+                        }}
+                        className="w-full text-left px-2.5 py-2 rounded-lg text-xs hover:bg-slate-800 text-slate-200 flex items-center justify-between cursor-pointer transition-colors"
+                      >
+                        <span>🥪 Lunch Break</span>
+                        <span className="text-[10px] text-amber-400 font-mono font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">45m</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowBreakMenu(false);
+                          handleStartBreak("tea", 15);
+                        }}
+                        className="w-full text-left px-2.5 py-2 rounded-lg text-xs hover:bg-slate-800 text-slate-200 flex items-center justify-between cursor-pointer transition-colors"
+                      >
+                        <span>☕ Tea / Bio</span>
+                        <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">15m</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowBreakMenu(false);
+                          handleStartBreak("meeting", 30);
+                        }}
+                        className="w-full text-left px-2.5 py-2 rounded-lg text-xs hover:bg-slate-800 text-slate-200 flex items-center justify-between cursor-pointer transition-colors"
+                      >
+                        <span>👥 Meeting / Training</span>
+                        <span className="text-[10px] text-indigo-400 font-mono font-bold bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20">30m</span>
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleStartBreak("lunch", 45)}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-800 text-slate-200 flex items-center justify-between cursor-pointer"
-                    >
-                      <span>🥪 Lunch Break</span>
-                      <span className="text-[10px] text-amber-400 font-mono">45m</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleStartBreak("tea", 15)}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-800 text-slate-200 flex items-center justify-between cursor-pointer"
-                    >
-                      <span>☕ Tea / Bio</span>
-                      <span className="text-[10px] text-emerald-400 font-mono">15m</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleStartBreak("meeting", 30)}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-800 text-slate-200 flex items-center justify-between cursor-pointer"
-                    >
-                      <span>👥 Meeting / Training</span>
-                      <span className="text-[10px] text-indigo-400 font-mono">30m</span>
-                    </button>
-                  </div>
+                  )}
                 </div>
               );
             })()}

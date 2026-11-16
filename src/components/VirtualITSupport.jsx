@@ -524,22 +524,24 @@ export default function VirtualITSupport({
             </button>
           )}
 
-          {/* Call IT Button */}
-          <button
-            onClick={() => {
-              if (orgConfig?.workspace_mode === "ENTERPRISE") {
-                // Enterprise internal staff: opens internal IT contact modal (Phone, Helpdesk Email, and Teams/Slack link)
-                setShowContactModal(true);
-              } else {
-                // Commercial client / Individual: Gated by Paystack checkout
-                handleSelectThreeWayOption("call", { summary: "Direct Phone Call IT Support" });
-              }
-            }}
-            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs px-3 py-1.5 rounded-lg transition-all border border-slate-700"
-          >
-            <Phone className="w-3.5 h-3.5 text-emerald-400" />
-            Call IT
-          </button>
+          {/* Call IT Button - hidden for technicians who are the IT responders */}
+          {userRole !== "technician" && currentUserProfile?.role !== "technician" && (
+            <button
+              onClick={() => {
+                if (orgConfig?.workspace_mode === "ENTERPRISE") {
+                  // Enterprise internal staff: opens internal IT contact modal (Phone, Helpdesk Email, and Teams/Slack link)
+                  setShowContactModal(true);
+                } else {
+                  // Commercial client / Individual: Gated by Paystack checkout
+                  handleSelectThreeWayOption("call", { summary: "Direct Phone Call IT Support" });
+                }
+              }}
+              className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs px-3 py-1.5 rounded-lg transition-all border border-slate-700"
+            >
+              <Phone className="w-3.5 h-3.5 text-emerald-400" />
+              Call IT
+            </button>
+          )}
         </div>
       </div>
 
