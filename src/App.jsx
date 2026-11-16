@@ -2424,6 +2424,8 @@ export default function HelpdeskAI() {
       "enforce_mfa", "portal_slug", "remote_fee", "physical_visit_fee",
       "workspace_mode", "email_templates", "email_branding", "email_footer",
       "custom_paystack_public_key", "is_master_org",
+      "paystack_subaccount_code", "paystack_bank_name", "paystack_account_number",
+      "paystack_account_name", "paystack_settlement_bank"
     ];
 
     // Strip any unknown fields to avoid PGRST204 "column not found" errors

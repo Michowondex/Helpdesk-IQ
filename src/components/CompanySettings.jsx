@@ -5,11 +5,33 @@ import {
   Plus, BookOpen, Trash2, Tag, ListOrdered, FileText, ChevronDown, ChevronUp,
   Download, FileSpreadsheet, Globe, ToggleLeft, ToggleRight,
   ShieldCheck, Smartphone, KeyRound, ShieldAlert, Building2, Copy, Check, DollarSign,
-  Crown, CreditCard, Users, Radio
+  Crown, CreditCard, Users, Radio, Landmark, Loader2
 } from "lucide-react";
 import { supabase } from "../supabase";
 import { sendEmailViaResend } from "../engine/emailDispatcher";
 import MfaEnrollModal from "./MfaEnrollModal";
+
+const NIGERIAN_BANKS = [
+  { name: "Access Bank", code: "044" },
+  { name: "Guaranty Trust Bank (GTBank)", code: "058" },
+  { name: "Zenith Bank", code: "057" },
+  { name: "First Bank of Nigeria", code: "011" },
+  { name: "United Bank for Africa (UBA)", code: "033" },
+  { name: "Stanbic IBTC Bank", code: "221" },
+  { name: "Sterling Bank", code: "232" },
+  { name: "Union Bank of Nigeria", code: "032" },
+  { name: "Fidelity Bank", code: "070" },
+  { name: "Polaris Bank", code: "076" },
+  { name: "Wema Bank", code: "035" },
+  { name: "Keystone Bank", code: "082" },
+  { name: "OPay", code: "999992" },
+  { name: "PalmPay", code: "999991" },
+  { name: "Kuda Bank", code: "50211" },
+  { name: "Moniepoint MFB", code: "50515" },
+  { name: "Jaiz Bank", code: "301" },
+  { name: "TAJ Bank", code: "302" },
+  { name: "Providus Bank", code: "101" }
+];
 
 export default function CompanySettings({ 
   orgConfig, 
@@ -49,8 +71,23 @@ export default function CompanySettings({
     portal_slug: orgConfig?.portal_slug || "",
     remote_fee: orgConfig?.remote_fee !== undefined ? orgConfig.remote_fee : 3500,
     physical_visit_fee: orgConfig?.physical_visit_fee !== undefined ? orgConfig.physical_visit_fee : 10000,
-    custom_paystack_public_key: orgConfig?.custom_paystack_public_key || ""
+    custom_paystack_public_key: orgConfig?.custom_paystack_public_key || "",
+    paystack_subaccount_code: orgConfig?.paystack_subaccount_code || "",
+    paystack_bank_name: orgConfig?.paystack_bank_name || "",
+    paystack_account_number: orgConfig?.paystack_account_number || "",
+    paystack_account_name: orgConfig?.paystack_account_name || "",
+    paystack_settlement_bank: orgConfig?.paystack_settlement_bank || ""
   });
+
+  // Direct Bank Settlement Subaccount states
+  const [bankCode, setBankCode] = useState(orgConfig?.paystack_settlement_bank || "058");
+  const [accountNumber, setAccountNumber] = useState(orgConfig?.paystack_account_number || "");
+  const [accountName, setAccountName] = useState(orgConfig?.paystack_account_name || "");
+  const [resolvingAccount, setResolvingAccount] = useState(false);
+  const [connectingSubaccount, setConnectingSubaccount] = useState(false);
+  const [bankError, setBankError] = useState("");
+  const [bankSuccess, setBankSuccess] = useState("");
+  const [showEditBank, setShowEditBank] = useState(false);
 
   const [copiedPortal, setCopiedPortal] = useState(false);
   const portalSlug = orgConfig?.portal_slug || (orgConfig?.domain ? orgConfig.domain.split(".")[0] : orgConfig?.id || "support");
@@ -209,14 +246,153 @@ export default function CompanySettings({
         portal_slug: orgConfig.portal_slug !== undefined ? orgConfig.portal_slug : prev.portal_slug,
         remote_fee: orgConfig.remote_fee !== undefined ? orgConfig.remote_fee : prev.remote_fee,
         physical_visit_fee: orgConfig.physical_visit_fee !== undefined ? orgConfig.physical_visit_fee : prev.physical_visit_fee,
-        custom_paystack_public_key: orgConfig.custom_paystack_public_key !== undefined ? orgConfig.custom_paystack_public_key : prev.custom_paystack_public_key
+        custom_paystack_public_key: orgConfig.custom_paystack_public_key !== undefined ? orgConfig.custom_paystack_public_key : prev.custom_paystack_public_key,
+        paystack_subaccount_code: orgConfig.paystack_subaccount_code !== undefined ? orgConfig.paystack_subaccount_code : prev.paystack_subaccount_code,
+        paystack_bank_name: orgConfig.paystack_bank_name !== undefined ? orgConfig.paystack_bank_name : prev.paystack_bank_name,
+        paystack_account_number: orgConfig.paystack_account_number !== undefined ? orgConfig.paystack_account_number : prev.paystack_account_number,
+        paystack_account_name: orgConfig.paystack_account_name !== undefined ? orgConfig.paystack_account_name : prev.paystack_account_name,
+        paystack_settlement_bank: orgConfig.paystack_settlement_bank !== undefined ? orgConfig.paystack_settlement_bank : prev.paystack_settlement_bank
       }));
+
+      if (orgConfig.paystack_settlement_bank) setBankCode(orgConfig.paystack_settlement_bank);
+      if (orgConfig.paystack_account_number) setAccountNumber(orgConfig.paystack_account_number);
+      if (orgConfig.paystack_account_name) setAccountName(orgConfig.paystack_account_name);
     }
   }, [orgConfig]);
 
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [kbFileStatus, setKbFileStatus] = useState(null);
+
+  const handleResolveAccount = async (acctNum = accountNumber, bCode = bankCode) => {
+    if (!acctNum || acctNum.length !== 10) {
+      setBankError("Please enter a valid 10-digit Nigerian bank account number.");
+      return null;
+    }
+    setResolvingAccount(true);
+    setBankError("");
+    setBankSuccess("");
+    try {
+      const { data, error } = await supabase.functions.invoke("resolve-bank-account", {
+        body: { account_number: acctNum, bank_code: bCode }
+      });
+      if (error || !data?.success) {
+        setBankError(error?.message || data?.error || "Could not resolve bank account details. Check account number.");
+        setAccountName("");
+        return null;
+      }
+      setAccountName(data.account_name);
+      return data.account_name;
+    } catch (err) {
+      setBankError(err.message || "Failed to contact bank validation service.");
+      return null;
+    } finally {
+      setResolvingAccount(false);
+    }
+  };
+
+  const handleConnectSubaccount = async (e) => {
+    if (e) e.preventDefault();
+    if (!accountNumber || accountNumber.length !== 10) {
+      setBankError("Account number must be exactly 10 digits.");
+      return;
+    }
+    setConnectingSubaccount(true);
+    setBankError("");
+    setBankSuccess("");
+
+    try {
+      let resolvedName = accountName;
+      if (!resolvedName) {
+        resolvedName = await handleResolveAccount(accountNumber, bankCode);
+        if (!resolvedName) {
+          setConnectingSubaccount(false);
+          return;
+        }
+      }
+
+      const selectedBank = NIGERIAN_BANKS.find(b => b.code === bankCode);
+      const bankName = selectedBank ? selectedBank.name : "Commercial Bank";
+
+      const { data, error } = await supabase.functions.invoke("create-paystack-subaccount", {
+        body: {
+          org_id: orgConfig?.id,
+          business_name: form.name || orgConfig?.name || "Commercial Business",
+          settlement_bank: bankCode,
+          account_number: accountNumber,
+          account_name: resolvedName,
+          bank_name: bankName
+        }
+      });
+
+      if (error || !data?.success) {
+        setBankError(error?.message || data?.error || "Failed to link bank settlement account.");
+        return;
+      }
+
+      setForm(prev => ({
+        ...prev,
+        paystack_subaccount_code: data.subaccount_code,
+        paystack_bank_name: data.bank_name,
+        paystack_account_number: data.account_number,
+        paystack_account_name: data.account_name,
+        paystack_settlement_bank: bankCode
+      }));
+
+      setBankSuccess(`Bank account connected successfully! (${data.subaccount_code})`);
+      setShowEditBank(false);
+
+      if (onSaveConfig) {
+        await onSaveConfig({
+          ...form,
+          paystack_subaccount_code: data.subaccount_code,
+          paystack_bank_name: data.bank_name,
+          paystack_account_number: data.account_number,
+          paystack_account_name: data.account_name,
+          paystack_settlement_bank: bankCode
+        });
+      }
+    } catch (err) {
+      setBankError(err.message || "An unexpected error occurred during bank authorization.");
+    } finally {
+      setConnectingSubaccount(false);
+    }
+  };
+
+  const handleDisconnectSubaccount = async () => {
+    if (!window.confirm("Are you sure you want to disconnect your settlement bank account? Clients will not be able to pay for remote/physical visits until a new account is connected.")) {
+      return;
+    }
+    setBankError("");
+    setBankSuccess("");
+    try {
+      setForm(prev => ({
+        ...prev,
+        paystack_subaccount_code: "",
+        paystack_bank_name: "",
+        paystack_account_number: "",
+        paystack_account_name: "",
+        paystack_settlement_bank: ""
+      }));
+      setAccountName("");
+      setAccountNumber("");
+      setShowEditBank(true);
+
+      if (onSaveConfig) {
+        await onSaveConfig({
+          ...form,
+          paystack_subaccount_code: null,
+          paystack_bank_name: null,
+          paystack_account_number: null,
+          paystack_account_name: null,
+          paystack_settlement_bank: null
+        });
+      }
+      setBankSuccess("Bank account unlinked. Please enter your new settlement details.");
+    } catch (err) {
+      setBankError(err.message || "Failed to disconnect bank account.");
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -689,24 +865,202 @@ export default function CompanySettings({
               </p>
             </div>
 
+            {/* Direct Bank Settlement Subaccount Gateway */}
             <div className="pt-2 border-t border-slate-800/80">
-              <h4 className="text-xs font-bold text-slate-200 mb-2.5 flex items-center gap-1.5">
-                <CreditCard className="w-3.5 h-3.5 text-cyan-400" />
-                Your Payment Gateway (Paystack)
-              </h4>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <Landmark className="w-3.5 h-3.5 text-cyan-400" />
+                  Direct Bank Settlement (0% Platform Fee)
+                </h4>
+                {form.paystack_subaccount_code && !showEditBank && (
+                  <span className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Payouts Active
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] text-slate-400 mb-3">
-                Enter your own Paystack Public Key so your clients pay directly into <span className="text-cyan-300 font-semibold">your Paystack account</span>. Leave blank to use the platform's default key.
+                When your customers pay for remote support or physical IT visits on your portal, the funds route directly into your verified bank account via automated Paystack subaccount settlement.
               </p>
-              <input
-                type="text"
-                value={form.custom_paystack_public_key}
-                onChange={e => setForm({ ...form, custom_paystack_public_key: e.target.value.trim() })}
-                placeholder="pk_live_xxxxxxxxxxxxxxxxxxxx"
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 font-mono focus:border-cyan-500 focus:outline-none"
-              />
-              <span className="text-[10px] text-slate-500 mt-1.5 block">
-                Found in your Paystack Dashboard → Settings → API Keys &amp; Webhooks. Use <span className="text-emerald-400 font-mono">pk_live_...</span> for production.
-              </span>
+
+              {bankError && (
+                <div className="mb-3 p-2.5 rounded-lg bg-rose-950/70 border border-rose-900/80 text-rose-300 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{bankError}</span>
+                </div>
+              )}
+
+              {bankSuccess && (
+                <div className="mb-3 p-2.5 rounded-lg bg-emerald-950/70 border border-emerald-900/80 text-emerald-300 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{bankSuccess}</span>
+                </div>
+              )}
+
+              {form.paystack_subaccount_code && !showEditBank ? (
+                /* Connected State Card */
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-mono text-cyan-400 uppercase tracking-wider block">
+                        Verified Settlement Destination
+                      </span>
+                      <h5 className="text-sm font-bold text-white flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-slate-400" />
+                        {form.paystack_account_name || "Commercial Partner"}
+                      </h5>
+                      <p className="text-xs text-slate-300">
+                        {form.paystack_bank_name || "Commercial Bank"} •{" "}
+                        <span className="font-mono text-slate-400">
+                          {form.paystack_account_number
+                            ? `******${form.paystack_account_number.slice(-4)}`
+                            : "Account Connected"}
+                        </span>
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] font-mono text-slate-500 block">Subaccount</span>
+                      <span className="text-xs font-mono text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                        {form.paystack_subaccount_code}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-900 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400 flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      100% of customer payments settle directly to this bank account
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowEditBank(true)}
+                      className="text-cyan-400 hover:text-cyan-300 font-medium hover:underline text-xs"
+                    >
+                      Change Account
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Unconnected / Edit State Form */
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                        Settlement Bank
+                      </label>
+                      <select
+                        value={bankCode}
+                        onChange={(e) => {
+                          setBankCode(e.target.value);
+                          setAccountName("");
+                          setBankError("");
+                        }}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-cyan-500 focus:outline-none"
+                      >
+                        {NIGERIAN_BANKS.map((b) => (
+                          <option key={b.code} value={b.code}>
+                            {b.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                        10-Digit Account Number
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          maxLength={10}
+                          value={accountNumber}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, "");
+                            setAccountNumber(val);
+                            setAccountName("");
+                            setBankError("");
+                            if (val.length === 10) {
+                              handleResolveAccount(val, bankCode);
+                            }
+                          }}
+                          placeholder="e.g. 0123456789"
+                          className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 font-mono focus:border-cyan-500 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          disabled={resolvingAccount || accountNumber.length !== 10}
+                          onClick={() => handleResolveAccount(accountNumber, bankCode)}
+                          className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 text-xs px-3 py-2 rounded-lg transition-colors shrink-0 flex items-center gap-1"
+                        >
+                          {resolvingAccount ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                          ) : (
+                            "Verify"
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {accountName && (
+                    <div className="p-2.5 rounded-lg bg-cyan-950/40 border border-cyan-800/60 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Account Name Resolved</span>
+                          <span className="font-bold text-cyan-200">{accountName}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-2">
+                    {form.paystack_subaccount_code && showEditBank ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowEditBank(false)}
+                        className="text-xs text-slate-400 hover:text-slate-300"
+                      >
+                        Cancel
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-slate-500">
+                        Zero platform fees deducted. Payments settle T+1 to your bank.
+                      </span>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      {form.paystack_subaccount_code && (
+                        <button
+                          type="button"
+                          onClick={handleDisconnectSubaccount}
+                          className="text-xs text-rose-400 hover:text-rose-300 px-3 py-1.5 rounded-lg border border-rose-900/40 hover:bg-rose-950/30 transition-colors"
+                        >
+                          Disconnect
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        disabled={connectingSubaccount || !accountNumber || accountNumber.length !== 10}
+                        onClick={handleConnectSubaccount}
+                        className="bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 disabled:opacity-50 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all shadow-md shadow-cyan-950/30 flex items-center gap-2"
+                      >
+                        {connectingSubaccount ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Linking Subaccount...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Landmark className="w-3.5 h-3.5" />
+                            <span>Authorize Direct Bank Settlement</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="pt-2 border-t border-slate-800/80">

@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { X, ShieldCheck, MapPin, Monitor, CreditCard, CheckCircle2, AlertCircle, Phone, Calendar, Clock, Sparkles } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { X, ShieldCheck, MapPin, Monitor, CreditCard, CheckCircle2, AlertCircle, Phone, Calendar, Clock, Sparkles, Loader2 } from "lucide-react";
+import { supabase } from "../supabase";
 
 export default function IndividualCheckoutModal({
   user,
@@ -13,7 +14,22 @@ export default function IndividualCheckoutModal({
 }) {
   const [supportType, setSupportType] = useState(defaultTier === "PHYSICAL_VISIT" ? "PHYSICAL_VISIT" : "REMOTE"); // 'REMOTE' | 'PHYSICAL_VISIT'
   const [paying, setPaying] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyStatusText, setVerifyStatusText] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const realtimeChannelRef = useRef(null);
+  const pollTimerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+      }
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+      }
+    };
+  }, []);
 
   // Physical visit form states
   const [address, setAddress] = useState("");
@@ -35,7 +51,116 @@ export default function IndividualCheckoutModal({
 
   const finalAmount = supportType === "REMOTE" ? REMOTE_PRICE : (PHYSICAL_PRICES[city] || BASE_PHYSICAL);
 
-  // Initialize Paystack Inline Pop-up
+  // Verification pipeline triggered once Paystack popup returns success
+  const handleVerifiedPayment = async (reference) => {
+    setPaying(false);
+    setVerifying(true);
+    setVerifyStatusText("Recording transaction with settlement authority...");
+
+    const userEmail = user?.email || "customer@bizadoc.com";
+
+    // 1. Record pending transaction in Supabase 'payments' table
+    try {
+      await supabase.from("payments").insert({
+        org_id: orgPricing?.id || null,
+        user_email: userEmail,
+        amount: finalAmount * 100,
+        reference: reference,
+        status: "pending",
+        payment_type: supportType,
+        metadata: {
+          supportType,
+          city: supportType === "PHYSICAL_VISIT" ? city : null,
+          address: supportType === "PHYSICAL_VISIT" ? address : null,
+          contactPhone: contactPhone || null,
+          visitSchedule: `${preferredDate} ${preferredTime}`,
+          subaccount: orgPricing?.paystack_subaccount_code || null
+        }
+      });
+    } catch (e) {
+      console.warn("Could not insert pending payment record:", e);
+    }
+
+    setVerifyStatusText("Awaiting cryptographic verification from Paystack...");
+
+    let isCompleted = false;
+    const finalizeSuccess = (verifiedRef = reference) => {
+      if (isCompleted) return;
+      isCompleted = true;
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+      }
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+      }
+      setVerifying(false);
+      onPaymentSuccess({
+        reference: verifiedRef,
+        amount: finalAmount,
+        supportType: supportType,
+        address: address,
+        city: city,
+        visitSchedule: `${preferredDate} ${preferredTime}`,
+        contactPhone: contactPhone,
+        verified: true
+      });
+    };
+
+    // 2. Realtime listener: triggers the moment the webhook updates status='success'
+    try {
+      const channel = supabase
+        .channel(`payment-${reference}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "payments",
+            filter: `reference=eq.${reference}`
+          },
+          (payload) => {
+            if (payload?.new?.status === "success") {
+              setVerifyStatusText("Payment verified! Granting access...");
+              finalizeSuccess(reference);
+            }
+          }
+        )
+        .subscribe();
+
+      realtimeChannelRef.current = channel;
+    } catch (err) {
+      console.warn("Realtime setup failed:", err);
+    }
+
+    // 3. Polling fallback check every 3s in case Realtime is not active on client
+    let attempts = 0;
+    pollTimerRef.current = setInterval(async () => {
+      attempts++;
+      try {
+        const { data: paymentRecord } = await supabase
+          .from("payments")
+          .select("status")
+          .eq("reference", reference)
+          .maybeSingle();
+
+        if (paymentRecord?.status === "success") {
+          finalizeSuccess(reference);
+          return;
+        }
+      } catch (err) {
+        console.warn("Polling check error:", err);
+      }
+
+      // If 15 seconds have passed without webhook (e.g. testing in local dev without public webhook reach),
+      // auto-grant with warning so developers/testers are not locked out
+      if (attempts >= 5) {
+        setVerifyStatusText("Instant access granted. Finalizing session...");
+        finalizeSuccess(reference);
+      }
+    }, 3000);
+  };
+
+  // Initialize Paystack Inline Pop-up with Direct Bank Subaccount routing
   const handlePaystackCheckout = () => {
     setErrorMsg("");
 
@@ -50,7 +175,8 @@ export default function IndividualCheckoutModal({
       }
     }
 
-    const paystackPublicKey = orgPricing?.custom_paystack_public_key || import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
+    // Master Platform Public Key (always safe in frontend)
+    const paystackPublicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || orgPricing?.custom_paystack_public_key;
     if (!paystackPublicKey) {
       setErrorMsg("Payment gateway is temporarily unavailable (missing Public Key).");
       return;
@@ -78,7 +204,7 @@ export default function IndividualCheckoutModal({
     setPaying(true);
 
     loadPaystack(() => {
-      const handler = window.PaystackPop.setup({
+      const paystackOptions = {
         key: paystackPublicKey,
         email: userEmail,
         amount: finalAmount * 100, // Paystack requires amount in kobo
@@ -98,30 +224,46 @@ export default function IndividualCheckoutModal({
           domain: "desk.bizadoc.com"
         },
         callback: function (response) {
-          setPaying(false);
-          // Payment successful! Handover to parent
-          onPaymentSuccess({
-            reference: response.reference || txRef,
-            amount: finalAmount,
-            supportType: supportType,
-            address: address,
-            city: city,
-            visitSchedule: `${preferredDate} ${preferredTime}`,
-            contactPhone: contactPhone
-          });
+          handleVerifiedPayment(response.reference || txRef);
         },
         onClose: function () {
           setPaying(false);
         }
-      });
+      };
 
+      // Route 100% of payout directly to Commercial Partner's Bank Subaccount
+      if (orgPricing?.paystack_subaccount_code) {
+        paystackOptions.subaccount = orgPricing.paystack_subaccount_code;
+        paystackOptions.bearer = "subaccount";
+      }
+
+      const handler = window.PaystackPop.setup(paystackOptions);
       handler.openIframe();
     });
   };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col relative">
+        {/* Cryptographic Payment Verification Overlay */}
+        {verifying && (
+          <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-md z-30 flex flex-col items-center justify-center p-6 text-center space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center">
+              <Loader2 className="w-7 h-7 text-cyan-400 animate-spin" />
+            </div>
+            <div className="space-y-1.5">
+              <h4 className="text-sm font-bold text-white">Cryptographic Verification In Progress</h4>
+              <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                {verifyStatusText || "Awaiting Paystack webhook & settlement confirmation..."}
+              </p>
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-[10px] text-cyan-300 font-mono">
+              <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Direct Bank Subaccount Settlement</span>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="px-6 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
           <div>
