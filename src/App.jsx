@@ -2297,35 +2297,62 @@ export default function HelpdeskAI() {
   };
 
   const handleSaveOrgConfig = async (newConfig) => {
+    // Whitelist of valid columns in the organizations table.
+    // Add any new DB columns here when they are created in Supabase.
+    const VALID_ORG_COLUMNS = [
+      "name", "domain", "logo_url", "support_phone", "support_email",
+      "allstaff_email", "incident_manager_email", "support_chat_link",
+      "support_whatsapp", "incident_sla_minutes", "incident_tier2_minutes",
+      "incident_tier3_minutes", "ticket_sla_hours", "work_start_hour",
+      "work_end_hour", "work_days", "vpn_gateway", "enable_global_kb",
+      "enforce_mfa", "portal_slug", "remote_fee", "physical_visit_fee",
+      "workspace_mode", "email_templates", "email_branding", "email_footer",
+      "custom_paystack_public_key", "is_master_org",
+    ];
+
+    // Strip any unknown fields to avoid PGRST204 "column not found" errors
+    const filteredConfig = Object.fromEntries(
+      Object.entries(newConfig).filter(([k]) => VALID_ORG_COLUMNS.includes(k))
+    );
+
     try {
-      let savedOrg = null;
       if (orgConfig?.id) {
         const { data, error } = await supabase
           .from("organizations")
-          .update(newConfig)
+          .update(filteredConfig)
           .eq("id", orgConfig.id)
           .select()
           .maybeSingle();
-        if (!error && data) savedOrg = data;
+
+        if (error) {
+          console.error("Save org DB error:", error);
+          showBanner(`⚠️ Failed to save: ${error.message}`, "#ef4444");
+          return;
+        }
+
+        if (data) setOrgConfig(data);
+        else setOrgConfig(prev => ({ ...prev, ...filteredConfig }));
       } else {
         const { data, error } = await supabase
           .from("organizations")
-          .insert(newConfig)
+          .insert(filteredConfig)
           .select()
           .maybeSingle();
-        if (!error && data) savedOrg = data;
+
+        if (error) {
+          console.error("Insert org DB error:", error);
+          showBanner(`⚠️ Failed to save: ${error.message}`, "#ef4444");
+          return;
+        }
+
+        if (data) setOrgConfig(data);
+        else setOrgConfig(prev => ({ ...prev, ...filteredConfig }));
       }
 
-      if (savedOrg) {
-        setOrgConfig(savedOrg);
-      } else {
-        setOrgConfig(prev => ({ ...prev, ...newConfig }));
-      }
-      showBanner("Organization profile saved permanently to database!", "#22c55e");
+      showBanner("✅ Settings saved permanently!", "#22c55e");
     } catch (err) {
-      console.warn("Save org error:", err);
-      setOrgConfig(prev => ({ ...prev, ...newConfig }));
-      showBanner("Saved to session memory", "#eab308");
+      console.error("Save org error:", err);
+      showBanner(`⚠️ Error saving settings: ${err.message}`, "#ef4444");
     }
   };
 
