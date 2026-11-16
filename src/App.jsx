@@ -157,7 +157,7 @@ function EmailModal({ email, onClose }) {
 }
 
 // ── Live SLA Progress Bar for Tickets (With Business Hours Pause) ────────────
-function TicketSlaBar({ ticket, slaHours = 1, orgConfig = null }) {
+function TicketSlaBar({ ticket, slaHours = 1, orgConfig = null, isCustomerOrStaff = false }) {
   const isResolved = ticket.status === "RESOLVED";
   const startHour = orgConfig?.work_start_hour ?? 8;
   const endHour = orgConfig?.work_end_hour ?? 18;
@@ -179,7 +179,11 @@ function TicketSlaBar({ ticket, slaHours = 1, orgConfig = null }) {
     return (
       <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-medium mt-2">
         <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
-        <span>Resolved in {totalMins}m business time {ticket.sla_breached ? "(SLA Breached)" : "(Within SLA ✓)"}</span>
+        <span>
+          {isCustomerOrStaff 
+            ? `Resolved in ${totalMins}m • Fixed & Verified ✓`
+            : `Resolved in ${totalMins}m business time ${ticket.sla_breached ? "(SLA Breached)" : "(Within SLA ✓)"}`}
+        </span>
       </div>
     );
   }
@@ -187,7 +191,7 @@ function TicketSlaBar({ ticket, slaHours = 1, orgConfig = null }) {
   const { isBreached, remainingMins, breachMins, pctRemaining, isPaused, nextResumeText } = slaData;
 
   const barColor = isBreached
-    ? "bg-rose-500 animate-pulse"
+    ? (isCustomerOrStaff ? "bg-amber-500" : "bg-rose-500 animate-pulse")
     : isPaused
     ? "bg-sky-500/70"
     : pctRemaining < 25
@@ -202,9 +206,24 @@ function TicketSlaBar({ ticket, slaHours = 1, orgConfig = null }) {
         {isPaused ? (
           <span className="font-semibold flex items-center gap-1.5 text-sky-400">
             <Pause className="w-3.5 h-3.5 shrink-0 animate-pulse" />
-            <span>⏸️ SLA Paused (Resumes {nextResumeText}) • {remainingMins}m left</span>
+            <span>
+              {isCustomerOrStaff
+                ? `⏸️ Outside Operating Hours (Resumes ${nextResumeText})`
+                : `⏸️ SLA Paused (Resumes ${nextResumeText}) • ${remainingMins}m left`}
+            </span>
+          </span>
+        ) : isCustomerOrStaff ? (
+          /* Customer / Staff Friendly Indicator: Reassuring turnaround rather than internal breach metrics */
+          <span className={`font-semibold flex items-center gap-1.5 ${
+            isBreached ? "text-amber-400" : pctRemaining < 50 ? "text-amber-300" : "text-slate-300"
+          }`}>
+            <Clock className="w-3.5 h-3.5 shrink-0 text-indigo-400" />
+            {isBreached 
+              ? "⚡ Priority Queue • Technicians actively attending"
+              : `⏱️ Estimated Turnaround: ~${remainingMins}m`}
           </span>
         ) : (
+          /* Internal IT View: Operational discipline countdown & breach warnings */
           <span className={`font-semibold flex items-center gap-1.5 ${
             isBreached ? "text-rose-400 animate-pulse" : pctRemaining < 25 ? "text-rose-400" : pctRemaining < 50 ? "text-amber-400" : "text-slate-300"
           }`}>
@@ -213,7 +232,7 @@ function TicketSlaBar({ ticket, slaHours = 1, orgConfig = null }) {
           </span>
         )}
         <span className="text-[10px] text-slate-500 font-mono">
-          {isPaused ? "Business Hours SLA" : `SLA Target: ${slaHours}h`}
+          {isCustomerOrStaff ? `Target: ~${slaHours}h` : (isPaused ? "Business Hours SLA" : `SLA Target: ${slaHours}h`)}
         </span>
       </div>
       <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
@@ -529,6 +548,7 @@ export default function HelpdeskAI() {
       let subQuery = supabase.from("subscriptions").select("*");
       let kbQuery = supabase.from("knowledge_base").select("*").order("created_at", { ascending: false });
       let notifQuery = supabase.from("user_notifications").select("*").order("created_at", { ascending: false }).limit(40);
+      let invQuery = supabase.from("organization_invitations").select("*").eq("status", "pending");
 
       if (activeOrgId) {
         incQuery = incQuery.eq("org_id", activeOrgId);
@@ -540,6 +560,7 @@ export default function HelpdeskAI() {
         subQuery = subQuery.eq("org_id", activeOrgId);
         kbQuery = kbQuery.eq("org_id", activeOrgId);
         notifQuery = notifQuery.eq("org_id", activeOrgId);
+        invQuery = invQuery.eq("org_id", activeOrgId);
       }
 
       const [
@@ -551,7 +572,8 @@ export default function HelpdeskAI() {
         { data: teamsData },
         { data: profs },
         { data: kb },
-        { data: notifsData }
+        { data: notifsData },
+        { data: invs }
       ] = await Promise.all([
         incQuery,
         tktQuery,
@@ -561,7 +583,8 @@ export default function HelpdeskAI() {
         teamQuery,
         profQuery,
         kbQuery,
-        notifQuery
+        notifQuery,
+        invQuery
       ]);
 
       if (inc) setIncidents(inc);
@@ -570,7 +593,32 @@ export default function HelpdeskAI() {
       if (svc) setServices(svc);
       if (sub) setSubscription(sub);
       if (teamsData) setTeams(teamsData);
-      if (profs) setMembers(profs);
+
+      // Combine active profiles with pending invitations so newly added technicians appear in ticket assignment immediately
+      const activeMemberList = profs || [];
+      const seenEmails = new Set(activeMemberList.map(p => (p.email || "").toLowerCase().trim()));
+      const combinedMembers = [...activeMemberList];
+
+      if (invs) {
+        for (const inv of invs) {
+          const invEmail = (inv.email || "").toLowerCase().trim();
+          if (invEmail && !seenEmails.has(invEmail)) {
+            seenEmails.add(invEmail);
+            combinedMembers.push({
+              id: inv.id,
+              org_id: inv.org_id,
+              email: inv.email,
+              full_name: inv.full_name || inv.email.split("@")[0],
+              role: inv.role || "technician",
+              department: inv.department || "General IT",
+              is_active: true,
+              isPending: true
+            });
+          }
+        }
+      }
+
+      setMembers(combinedMembers);
 
       // For individual users: also fetch global KB articles from the Master Org (bizadoc.com)
       // so they benefit from all published help articles without being part of that workspace.
@@ -2681,6 +2729,98 @@ export default function HelpdeskAI() {
     );
   }
 
+  // ── Portal loading / portal view — available to BOTH logged-in and logged-out users ──
+  if (portalLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-indigo-400 font-sans text-xs tracking-wider">
+        <Activity className="w-5 h-5 animate-spin mr-2" />
+        LOADING CLIENT SUPPORT PORTAL...
+      </div>
+    );
+  }
+
+  if (portalOrg) {
+    const isAdminPreview = currentUser && (currentUserProfile?.role === "admin" || isMasterOwner);
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+        {/* Admin Preview Banner */}
+        {isAdminPreview && (
+          <div className="sticky top-0 z-50 flex items-center justify-between gap-3 px-4 py-2 bg-amber-500 text-slate-900 text-xs font-semibold shadow-lg">
+            <span>👁️ Admin Preview Mode — Portal: <strong>{portalOrg.name}</strong></span>
+            <button
+              type="button"
+              onClick={() => { window.history.replaceState({}, '', '/'); window.location.reload(); }}
+              className="px-3 py-1 rounded-lg bg-slate-900 text-amber-400 hover:bg-slate-800 transition-colors font-medium"
+            >
+              ← Return to Dashboard
+            </button>
+          </div>
+        )}
+
+        {/* Branded Header */}
+        <header className="border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40 px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-400 flex items-center justify-center text-white shadow-md font-bold overflow-hidden">
+              {portalOrg.logo_url ? (
+                <img src={portalOrg.logo_url} alt={portalOrg.name} className="w-full h-full object-cover" />
+              ) : (
+                <Bot className="w-5 h-5" />
+              )}
+            </div>
+            <div>
+              <h1 className="text-sm font-bold text-white tracking-tight leading-none">{portalOrg.name}</h1>
+              <p className="text-[10px] text-slate-400 mt-1">24/7 Virtual IT Support &amp; Incident Desk</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {!currentUser && (
+              <button
+                type="button"
+                onClick={() => setShowAuthScreen(true)}
+                className="text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-lg border border-slate-800 transition-colors"
+              >
+                Staff Login →
+              </button>
+            )}
+          </div>
+        </header>
+
+        {/* Portal Body: Direct Virtual IT Support */}
+        <main className="flex-1 max-w-4xl w-full mx-auto p-4 md:p-6">
+          <VirtualITSupport
+            incidents={[]}
+            services={[]}
+            customArticles={customArticles}
+            orgConfig={portalOrg}
+            userRole="user"
+            accountType="individual"
+            currentUser={null}
+            currentUserProfile={null}
+            onSubmitTicket={async (ticketPayload) => {
+              const { data, error } = await supabase
+                .from("tickets")
+                .insert({
+                  ...ticketPayload,
+                  org_id: portalOrg.id
+                })
+                .select()
+                .single();
+              if (error) throw error;
+              showBanner(`✅ Support Ticket ${data.id} logged with ${portalOrg.name}!`, "#22c55e");
+              return data;
+            }}
+          />
+        </main>
+
+        {/* Subtle Whitelabel Footer */}
+        <footer className="py-4 text-center border-t border-slate-800/60 text-[11px] text-slate-500">
+          <span>Powered by BizaDesk</span> • <span>Enterprise IT Service Cloud</span>
+        </footer>
+      </div>
+    );
+  }
+
   if (!currentUser) {
     // ── Account Access Suspended Notice (Deactivated by Admin) ──
     if (accountSuspendedNotice) {
@@ -2750,15 +2890,6 @@ export default function HelpdeskAI() {
       );
     }
 
-    if (portalLoading) {
-      return (
-        <div className="min-h-screen bg-slate-950 flex items-center justify-center text-indigo-400 font-sans text-xs tracking-wider">
-          <Activity className="w-5 h-5 animate-spin mr-2" />
-          LOADING CLIENT SUPPORT PORTAL...
-        </div>
-      );
-    }
-
     if (showAuthScreen) {
       return (
         <AuthScreen
@@ -2768,72 +2899,6 @@ export default function HelpdeskAI() {
           }}
           onBackToLanding={() => setShowAuthScreen(false)}
         />
-      );
-    }
-
-    // White-Label Customer Support Portal for Commercial IT firms
-    if (portalOrg) {
-      return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-          {/* Branded Header */}
-          <header className="border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40 px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-400 flex items-center justify-center text-white shadow-md font-bold overflow-hidden">
-                {portalOrg.logo_url ? (
-                  <img src={portalOrg.logo_url} alt={portalOrg.name} className="w-full h-full object-cover" />
-                ) : (
-                  <Bot className="w-5 h-5" />
-                )}
-              </div>
-              <div>
-                <h1 className="text-sm font-bold text-white tracking-tight leading-none">{portalOrg.name}</h1>
-                <p className="text-[10px] text-slate-400 mt-1">24/7 Virtual IT Support &amp; Incident Desk</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setShowAuthScreen(true)}
-                className="text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-lg border border-slate-800 transition-colors"
-              >
-                Staff Login →
-              </button>
-            </div>
-          </header>
-
-          {/* Portal Body: Direct Virtual IT Support */}
-          <main className="flex-1 max-w-4xl w-full mx-auto p-4 md:p-6">
-            <VirtualITSupport
-              incidents={[]}
-              services={[]}
-              customArticles={customArticles}
-              orgConfig={portalOrg}
-              userRole="user"
-              accountType="individual"
-              currentUser={null}
-              currentUserProfile={null}
-              onSubmitTicket={async (ticketPayload) => {
-                const { data, error } = await supabase
-                  .from("tickets")
-                  .insert({
-                    ...ticketPayload,
-                    org_id: portalOrg.id
-                  })
-                  .select()
-                  .single();
-                if (error) throw error;
-                showBanner(`✅ Support Ticket ${data.id} logged with ${portalOrg.name}!`, "#22c55e");
-                return data;
-              }}
-            />
-          </main>
-
-          {/* Subtle Whitelabel Footer */}
-          <footer className="py-4 text-center border-t border-slate-800/60 text-[11px] text-slate-500">
-            <span>Powered by BizaDesk</span> • <span>Enterprise IT Service Cloud</span>
-          </footer>
-        </div>
       );
     }
 
@@ -2948,44 +3013,32 @@ export default function HelpdeskAI() {
                 <span className={`font-extrabold text-sm tracking-tight ${theme === "light" ? "text-slate-900" : "text-white"}`}>
                   Biza<span className={theme === "light" ? "text-indigo-600" : "text-indigo-400"}>Desk</span>
                 </span>
-                {isIndividualAccount ? (
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                    Personal IT
-                  </span>
-                ) : (isMasterOwner && userRole === "admin") ? (
+                {/* Role & Workspace Indicators: strictly clean and role-appropriate */}
+                {isMasterOwner && userRole === "admin" ? (
                   <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
                     Platform Owner
                   </span>
-                ) : (isMasterOwner || orgConfig?.is_master_org) ? (
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400/90 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                    Platform Team
-                  </span>
-                ) : orgConfig?.workspace_mode === "COMMERCIAL" ? (
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
-                    Commercial
-                  </span>
-                ) : (
+                ) : userRole === "admin" ? (
                   <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
-                    Enterprise
+                    Admin
                   </span>
-                )}
-                {!isIndividualAccount && userRole === "technician" && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20">
+                ) : userRole === "technician" ? (
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
                     Technician
                   </span>
-                )}
-                {!isIndividualAccount && userRole === "user" && (
-                  <span className="text-[10px] font-medium uppercase tracking-wider text-slate-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
-                    Staff
+                ) : isIndividualAccount ? (
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                    Personal IT
                   </span>
-                )}
+                ) : null}
               </div>
-              {!isIndividualAccount && (
-                <span className="text-[11px] text-slate-400 flex items-center gap-1 font-medium">
-                  <Building2 className="w-3 h-3 text-slate-500" />
-                  {orgConfig.name || "Primary Organization"}
+              {/* Company / Workspace Name — Clean single identity line for all users */}
+              <span className="text-[11px] text-slate-400 flex items-center gap-1 font-medium mt-0.5">
+                <Building2 className="w-3 h-3 text-slate-500 shrink-0" />
+                <span className="truncate max-w-[200px]">
+                  {isIndividualAccount && !orgConfig?.name ? "Personal IT Workspace" : (orgConfig?.name || "Company Workspace")}
                 </span>
-              )}
+              </span>
             </div>
 
             {/* Live System Status Indicator & Clock */}
@@ -3156,16 +3209,18 @@ export default function HelpdeskAI() {
                   {currentUserProfile?.full_name || currentUser.email.split("@")[0]}
                 </div>
                 <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1.5">
-                  <span className={`px-1.5 py-0.2 rounded font-bold uppercase tracking-wider text-[9px] border ${
-                    userRole === "admin" 
-                      ? "bg-indigo-500/15 text-indigo-400 border-indigo-500/30"
-                      : userRole === "technician"
-                      ? "bg-cyan-500/15 text-cyan-400 border-cyan-500/30"
-                      : "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                  }`}>
-                    {userRole === "admin" ? "Admin" : userRole === "technician" ? "Technician" : "Staff User"}
+                  {userRole === "admin" ? (
+                    <span className="px-1.5 py-0.2 rounded font-bold uppercase tracking-wider text-[9px] border bg-indigo-500/15 text-indigo-400 border-indigo-500/30">
+                      Admin
+                    </span>
+                  ) : userRole === "technician" ? (
+                    <span className="px-1.5 py-0.2 rounded font-bold uppercase tracking-wider text-[9px] border bg-cyan-500/15 text-cyan-400 border-cyan-500/30">
+                      Technician
+                    </span>
+                  ) : null}
+                  <span className="truncate max-w-[130px] text-slate-400">
+                    {currentUserProfile?.department || currentUser?.email}
                   </span>
-                  <span className="truncate max-w-[100px]">{currentUserProfile?.department || "General"}</span>
                 </div>
               </div>
             </div>
@@ -3692,7 +3747,12 @@ export default function HelpdeskAI() {
                           )}
 
                           {/* Live Dynamic SLA Countdown Bar (With Business Hours Pause) */}
-                          <TicketSlaBar ticket={t} slaHours={orgConfig?.ticket_sla_hours || 1} orgConfig={orgConfig} />
+                          <TicketSlaBar 
+                            ticket={t} 
+                            slaHours={orgConfig?.ticket_sla_hours || 1} 
+                            orgConfig={orgConfig} 
+                            isCustomerOrStaff={userRole === "user" || isIndividualAccount}
+                          />
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0 flex-wrap">
