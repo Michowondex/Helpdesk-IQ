@@ -81,7 +81,7 @@ export default function IndividualCheckoutModal({
       console.warn("Could not insert pending payment record:", e);
     }
 
-    setVerifyStatusText("Awaiting cryptographic verification from Paystack...");
+    setVerifyStatusText("Contacting Paystack settlement authority for verification...");
 
     let isCompleted = false;
     const finalizeSuccess = (verifiedRef = reference) => {
@@ -106,7 +106,36 @@ export default function IndividualCheckoutModal({
       });
     };
 
-    // 2. Realtime listener: triggers the moment the webhook updates status='success'
+    // 2. Direct Server-Side Verification: Calls Paystack API directly with Secret Key
+    try {
+      supabase.functions.invoke("verify-paystack-payment", {
+        body: {
+          reference: reference,
+          org_id: orgPricing?.id || null,
+          user_email: userEmail,
+          payment_type: supportType,
+          metadata: {
+            supportType,
+            city: supportType === "PHYSICAL_VISIT" ? city : null,
+            address: supportType === "PHYSICAL_VISIT" ? address : null,
+            contactPhone: contactPhone || null,
+            visitSchedule: `${preferredDate} ${preferredTime}`,
+            subaccount: orgPricing?.paystack_subaccount_code || null
+          }
+        }
+      }).then(({ data, error }) => {
+        if (!error && data?.success) {
+          setVerifyStatusText("Payment verified successfully via Paystack!");
+          finalizeSuccess(reference);
+        }
+      }).catch((e) => {
+        console.warn("Direct verification call failed:", e);
+      });
+    } catch (e) {
+      console.warn("Error initiating server verify:", e);
+    }
+
+    // 3. Realtime listener: triggers if webhook or background worker updates status='success'
     try {
       const channel = supabase
         .channel(`payment-${reference}`)
