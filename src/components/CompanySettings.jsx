@@ -48,7 +48,8 @@ export default function CompanySettings({
     enforce_mfa: orgConfig?.enforce_mfa === true,
     portal_slug: orgConfig?.portal_slug || "",
     remote_fee: orgConfig?.remote_fee !== undefined ? orgConfig.remote_fee : 3500,
-    physical_visit_fee: orgConfig?.physical_visit_fee !== undefined ? orgConfig.physical_visit_fee : 10000
+    physical_visit_fee: orgConfig?.physical_visit_fee !== undefined ? orgConfig.physical_visit_fee : 10000,
+    custom_paystack_public_key: orgConfig?.custom_paystack_public_key || ""
   });
 
   const [copiedPortal, setCopiedPortal] = useState(false);
@@ -207,7 +208,8 @@ export default function CompanySettings({
         enforce_mfa: orgConfig.enforce_mfa !== undefined ? orgConfig.enforce_mfa : prev.enforce_mfa,
         portal_slug: orgConfig.portal_slug !== undefined ? orgConfig.portal_slug : prev.portal_slug,
         remote_fee: orgConfig.remote_fee !== undefined ? orgConfig.remote_fee : prev.remote_fee,
-        physical_visit_fee: orgConfig.physical_visit_fee !== undefined ? orgConfig.physical_visit_fee : prev.physical_visit_fee
+        physical_visit_fee: orgConfig.physical_visit_fee !== undefined ? orgConfig.physical_visit_fee : prev.physical_visit_fee,
+        custom_paystack_public_key: orgConfig.custom_paystack_public_key !== undefined ? orgConfig.custom_paystack_public_key : prev.custom_paystack_public_key
       }));
     }
   }, [orgConfig]);
@@ -685,6 +687,26 @@ export default function CompanySettings({
               <p className="text-[11px] text-slate-500 mt-1.5">
                 Embed this URL on your company website, in client email signatures, or send to customers via WhatsApp.
               </p>
+            </div>
+
+            <div className="pt-2 border-t border-slate-800/80">
+              <h4 className="text-xs font-bold text-slate-200 mb-2.5 flex items-center gap-1.5">
+                <CreditCard className="w-3.5 h-3.5 text-cyan-400" />
+                Your Payment Gateway (Paystack)
+              </h4>
+              <p className="text-[11px] text-slate-400 mb-3">
+                Enter your own Paystack Public Key so your clients pay directly into <span className="text-cyan-300 font-semibold">your Paystack account</span>. Leave blank to use the platform's default key.
+              </p>
+              <input
+                type="text"
+                value={form.custom_paystack_public_key}
+                onChange={e => setForm({ ...form, custom_paystack_public_key: e.target.value.trim() })}
+                placeholder="pk_live_xxxxxxxxxxxxxxxxxxxx"
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 font-mono focus:border-cyan-500 focus:outline-none"
+              />
+              <span className="text-[10px] text-slate-500 mt-1.5 block">
+                Found in your Paystack Dashboard → Settings → API Keys &amp; Webhooks. Use <span className="text-emerald-400 font-mono">pk_live_...</span> for production.
+              </span>
             </div>
 
             <div className="pt-2 border-t border-slate-800/80">
