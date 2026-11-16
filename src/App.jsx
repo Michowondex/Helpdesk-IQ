@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { 
   Bot, AlertTriangle, Ticket, Activity, Mail, Settings, CreditCard,
   Plus, CheckCircle2, RefreshCw, Trash2, Clock, ShieldAlert,
-  ChevronRight, Building2, Flame, HelpCircle, LogOut, User, Users,
+  ChevronRight, ChevronDown, Building2, Flame, HelpCircle, LogOut, User, Users,
   Monitor, Cpu, Globe, Sparkles, MessageSquare, KeyRound, X, Eye, EyeOff,
   Sun, Moon, Scale, ShieldCheck, MapPin, Phone, GitBranch, Shield,
   Coffee, Pause, Play
@@ -548,7 +548,7 @@ export default function HelpdeskAI() {
       let subQuery = supabase.from("subscriptions").select("*");
       let kbQuery = supabase.from("knowledge_base").select("*").order("created_at", { ascending: false });
       let notifQuery = supabase.from("user_notifications").select("*").order("created_at", { ascending: false }).limit(40);
-      let invQuery = supabase.from("organization_invitations").select("*").eq("status", "pending");
+      let invQuery = supabase.from("organization_invitations").select("*");
 
       if (activeOrgId) {
         incQuery = incQuery.eq("org_id", activeOrgId);
@@ -612,7 +612,7 @@ export default function HelpdeskAI() {
               role: inv.role || "technician",
               department: inv.department || "General IT",
               is_active: true,
-              isPending: true
+              isPending: inv.status === "pending"
             });
           }
         }

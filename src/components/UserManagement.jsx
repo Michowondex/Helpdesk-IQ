@@ -81,8 +81,8 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
       }
       const { data: profData } = await profQuery;
 
-      // 2. Fetch pending organization invitations
-      let invQuery = supabase.from("organization_invitations").select("*").eq("status", "pending").order("created_at", { ascending: false });
+      // 2. Fetch all organization invitations for this target org (both pending and accepted)
+      let invQuery = supabase.from("organization_invitations").select("*").order("created_at", { ascending: false });
       if (targetOrg) {
         invQuery = invQuery.eq("org_id", targetOrg);
       }
@@ -106,7 +106,7 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
         }
       }
 
-      // Add pending invitations (if not already active)
+      // Add invitations (if not already active in profiles)
       if (invData) {
         for (const inv of invData) {
           const em = inv.email ? inv.email.toLowerCase().trim() : null;
@@ -120,7 +120,7 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
               role: inv.role || "technician",
               department: inv.department || "IT Helpdesk",
               is_active: true,
-              isPending: true,
+              isPending: inv.status === "pending",
               created_at: inv.created_at
             });
           }
@@ -169,8 +169,9 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
 
       // ── Step 1: Direct Provision via Edge Function (creates real Auth user with password) ──
       let provisionedViaApi = false;
+      let provData = null;
       try {
-        const { data: provData, error: provErr } = await supabase.functions.invoke("provision-member", {
+        const { data, error: provErr } = await supabase.functions.invoke("provision-member", {
           body: {
             org_id: targetOrgId,
             email: targetEmail,
@@ -180,6 +181,7 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
             department: assignedDept
           }
         });
+        provData = data;
 
         if (!provErr && provData?.success) {
           provisionedViaApi = true;
@@ -218,6 +220,25 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
 
         if (invErr) throw invErr;
       }
+
+      const optimisticallyAdded = {
+        id: provData?.user_id || `temp-${Date.now()}`,
+        org_id: targetOrgId,
+        email: targetEmail,
+        full_name: fullName.trim(),
+        role: role,
+        department: assignedDept,
+        is_active: true,
+        isPending: false,
+        created_at: new Date().toISOString()
+      };
+
+      setMembers(prev => {
+        const withoutOld = prev.filter(m => (m.email || "").toLowerCase().trim() !== targetEmail);
+        const nextList = [optimisticallyAdded, ...withoutOld];
+        if (onMembersChange) onMembersChange(nextList);
+        return nextList;
+      });
 
       setCreatedUserNotice({
         name: fullName.trim(),

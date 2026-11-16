@@ -131,12 +131,39 @@ serve(async (req) => {
       );
     }
 
-    // 4. Mark any invitation record as accepted or upsert it
+    // 4. Record in organization_invitations so directory queries and member lists have an invitation trail
     try {
-      await supabaseAdmin
+      const { data: existingInv } = await supabaseAdmin
         .from("organization_invitations")
-        .update({ status: "accepted", accepted_at: new Date().toISOString() })
-        .eq("email", cleanEmail);
+        .select("id")
+        .eq("email", cleanEmail)
+        .eq("org_id", org_id)
+        .maybeSingle();
+
+      if (existingInv?.id) {
+        await supabaseAdmin
+          .from("organization_invitations")
+          .update({ 
+            status: "accepted", 
+            accepted_at: new Date().toISOString(),
+            full_name: cleanName,
+            role: assignedRole,
+            department: assignedDept
+          })
+          .eq("id", existingInv.id);
+      } else {
+        await supabaseAdmin
+          .from("organization_invitations")
+          .insert({
+            org_id: org_id,
+            email: cleanEmail,
+            full_name: cleanName,
+            role: assignedRole,
+            department: assignedDept,
+            status: "accepted",
+            accepted_at: new Date().toISOString()
+          });
+      }
     } catch (_) {}
 
     return new Response(
