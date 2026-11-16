@@ -72,41 +72,63 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
   const loadMembers = async () => {
     try {
       setLoading(true);
-      let query = supabase.from("profiles").select("*").order("created_at", { ascending: false });
-      if (orgId) {
-        query = query.eq("org_id", orgId);
-      }
-      const { data, error } = await query;
-      if (!error && data) {
-        // Automatic Deduplication Guard: Keep only 1 record per unique lowercase email
-        const seenEmails = new Set();
-        const uniqueMembers = [];
-        const duplicateIdsToDelete = [];
+      const targetOrg = orgId || orgConfig?.id;
 
-        for (const m of data) {
+      // 1. Fetch active company profiles
+      let profQuery = supabase.from("profiles").select("*").order("created_at", { ascending: false });
+      if (targetOrg) {
+        profQuery = profQuery.eq("org_id", targetOrg);
+      }
+      const { data: profData } = await profQuery;
+
+      // 2. Fetch pending organization invitations
+      let invQuery = supabase.from("organization_invitations").select("*").eq("status", "pending").order("created_at", { ascending: false });
+      if (targetOrg) {
+        invQuery = invQuery.eq("org_id", targetOrg);
+      }
+      const { data: invData } = await invQuery;
+
+      const seenEmails = new Set();
+      const combinedMembers = [];
+
+      // Add active members first
+      if (profData) {
+        for (const m of profData) {
           const em = m.email ? m.email.toLowerCase().trim() : null;
           if (em) {
-            if (seenEmails.has(em)) {
-              duplicateIdsToDelete.push(m.id);
-            } else {
+            if (!seenEmails.has(em)) {
               seenEmails.add(em);
-              uniqueMembers.push(m);
+              combinedMembers.push({ ...m, isPending: false });
             }
           } else {
-            uniqueMembers.push(m);
+            combinedMembers.push({ ...m, isPending: false });
           }
         }
-
-        // Asynchronously purge duplicate rows from DB so they never reappear
-        if (duplicateIdsToDelete.length > 0) {
-          for (const dupId of duplicateIdsToDelete) {
-            supabase.from("profiles").delete().eq("id", dupId).catch(() => {});
-          }
-        }
-
-        setMembers(uniqueMembers);
-        if (onMembersChange) onMembersChange(uniqueMembers);
       }
+
+      // Add pending invitations (if not already active)
+      if (invData) {
+        for (const inv of invData) {
+          const em = inv.email ? inv.email.toLowerCase().trim() : null;
+          if (em && !seenEmails.has(em)) {
+            seenEmails.add(em);
+            combinedMembers.push({
+              id: inv.id,
+              org_id: inv.org_id,
+              email: inv.email,
+              full_name: inv.full_name || inv.email.split("@")[0],
+              role: inv.role || "technician",
+              department: inv.department || "IT Helpdesk",
+              is_active: true,
+              isPending: true,
+              created_at: inv.created_at
+            });
+          }
+        }
+      }
+
+      setMembers(combinedMembers);
+      if (onMembersChange) onMembersChange(combinedMembers);
     } catch (err) {
       console.warn("Error loading members:", err);
     } finally {
@@ -116,7 +138,7 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
 
   useEffect(() => {
     loadMembers();
-  }, [orgId]);
+  }, [orgId, orgConfig?.id]);
 
   const handleAddMember = async (e) => {
     e.preventDefault();
@@ -143,39 +165,21 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
     try {
       const tempPass = tempPassword.trim() || "BizaDesk@2026";
       const assignedDept = department || (teams[0]?.team_name || "General IT");
-
-      // ── Guard 2: Direct Database Duplicate Check ──────────────────────────
-      const { data: dbMatches } = await supabase
-        .from("profiles")
-        .select("id, full_name, email, department, role")
-        .eq("email", targetEmail);
-
-      if (dbMatches && dbMatches.length > 0) {
-        const match = dbMatches[0];
-        notify(`⚠️ A user with email "${targetEmail}" already exists in "${match.department || 'General IT'}". Cannot add duplicate.`, "#ef4444");
-        setAdding(false);
-        return;
-      }
-
-      // ── Provision New Member ──────────────────────────────────────────────
       const targetOrgId = orgId || orgConfig?.id || null;
-      const profileId = crypto.randomUUID();
-      const newMemberPayload = {
-        id: profileId,
-        org_id: targetOrgId,
-        full_name: fullName.trim(),
-        email: targetEmail,
-        role: role,
-        department: assignedDept,
-        account_type: "business",
-        is_active: true
-      };
 
-      const { error: insertErr } = await supabase
-        .from("profiles")
-        .insert(newMemberPayload);
+      // ── Clean Multi-Tenant Organization Invitation ─────────────────────────
+      const { error: invErr } = await supabase
+        .from("organization_invitations")
+        .insert({
+          org_id: targetOrgId,
+          email: targetEmail,
+          full_name: fullName.trim(),
+          role: role,
+          department: assignedDept,
+          status: "pending"
+        });
 
-      if (insertErr) throw insertErr;
+      if (invErr) throw invErr;
 
       setCreatedUserNotice({
         name: fullName.trim(),
@@ -184,7 +188,7 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
         role: ROLE_BADGES[role].label
       });
 
-      notify(`✓ ${fullName} provisioned as ${ROLE_BADGES[role].label} — they can now sign in with Google or request a password reset.`);
+      notify(`✓ ${fullName} invited as ${ROLE_BADGES[role].label} — they can now sign in with Google or request a password reset.`);
       setFullName("");
       setUsername("");
       setCustomEmail("");
@@ -199,11 +203,20 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
   };
 
   const handleDeleteMember = async (member) => {
-    const confirmMsg = `Are you sure you want to permanently delete ${member.full_name || member.email}?\n\nTip: You can click the Suspend button instead to revoke their login access while keeping their resolution history intact.`;
+    const isPending = member.isPending;
+    const confirmMsg = isPending
+      ? `Revoke and cancel invitation for ${member.full_name || member.email}?`
+      : `Are you sure you want to permanently delete ${member.full_name || member.email}?\n\nTip: You can click the Suspend button instead to revoke their login access while keeping their resolution history intact.`;
+
     if (!confirm(confirmMsg)) return;
     try {
-      await supabase.from("profiles").delete().eq("id", member.id);
-      notify(`Removed ${member.full_name || member.email}`, "#64748b");
+      if (isPending) {
+        await supabase.from("organization_invitations").delete().eq("id", member.id);
+        notify(`Invitation for ${member.full_name || member.email} revoked`, "#64748b");
+      } else {
+        await supabase.from("profiles").delete().eq("id", member.id);
+        notify(`Removed ${member.full_name || member.email}`, "#64748b");
+      }
       loadMembers();
     } catch (err) {
       notify(`Error deleting user: ${err.message}`, "#ef4444");
@@ -229,12 +242,20 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
         role: editForm.role,
         department: editForm.department
       };
-      const { error } = await supabase
-        .from("profiles")
-        .update(updates)
-        .eq("id", editingMember.id);
 
-      if (error) throw error;
+      if (editingMember.isPending) {
+        const { error } = await supabase
+          .from("organization_invitations")
+          .update(updates)
+          .eq("id", editingMember.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("profiles")
+          .update(updates)
+          .eq("id", editingMember.id);
+        if (error) throw error;
+      }
 
       try {
         await supabase.from("session_audit_logs").insert({
@@ -245,7 +266,7 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
         });
       } catch (_) {}
 
-      notify(`✓ Profile for ${updates.full_name || editingMember.email} updated successfully.`);
+      notify(`✓ Details for ${updates.full_name || editingMember.email} updated successfully.`);
       setEditingMember(null);
       loadMembers();
     } catch (err) {
@@ -480,7 +501,11 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
                         {m.department || <em className="text-slate-600">General IT</em>}
                       </td>
                       <td className="py-3 px-4">
-                        {isSuspended ? (
+                        {m.isPending ? (
+                          <span className="inline-flex items-center gap-1 text-amber-300 text-[10px] font-bold bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded">
+                            <Clock className="w-3 h-3 text-amber-400" /> Invited (Pending)
+                          </span>
+                        ) : isSuspended ? (
                           <span className="inline-flex items-center gap-1 text-rose-400 text-[11px] font-bold bg-rose-500/15 border border-rose-500/30 px-2 py-0.5 rounded">
                             <UserX className="w-3 h-3" /> Suspended
                           </span>
@@ -541,36 +566,55 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
                         )}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => handleToggleSuspend(m)}
-                            className={`p-1 transition-colors ${isSuspended ? "text-emerald-400 hover:text-emerald-300" : "text-slate-500 hover:text-amber-400"}`}
-                            title={isSuspended ? "Reactivate member account" : "Suspend / Disable access (Preserves past tickets & history)"}
-                          >
-                            {isSuspended ? <UserCheck className="w-4 h-4" /> : <UserX className="w-4 h-4" />}
-                          </button>
-                          <button
-                            onClick={() => handleOpenEdit(m)}
-                            className="text-slate-500 hover:text-cyan-400 p-1 transition-colors"
-                            title="Edit member name, role, or assigned team"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => { setResetTarget(m); setResetSent(false); }}
-                            className="text-slate-500 hover:text-indigo-400 p-1 transition-colors"
-                            title="Send password reset link"
-                          >
-                            <KeyRound className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteMember(m)}
-                            className="text-slate-500 hover:text-rose-400 p-1 transition-colors"
-                            title="Remove user permanently"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                        {m.isPending ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleOpenEdit(m)}
+                              className="text-slate-500 hover:text-cyan-400 p-1 transition-colors"
+                              title="Edit invited name, role, or assigned team"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteMember(m)}
+                              className="text-slate-500 hover:text-rose-400 p-1 transition-colors"
+                              title="Revoke / Cancel Invitation"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleToggleSuspend(m)}
+                              className={`p-1 transition-colors ${isSuspended ? "text-emerald-400 hover:text-emerald-300" : "text-slate-500 hover:text-amber-400"}`}
+                              title={isSuspended ? "Reactivate member account" : "Suspend / Disable access (Preserves past tickets & history)"}
+                            >
+                              {isSuspended ? <UserCheck className="w-4 h-4" /> : <UserX className="w-4 h-4" />}
+                            </button>
+                            <button
+                              onClick={() => handleOpenEdit(m)}
+                              className="text-slate-500 hover:text-cyan-400 p-1 transition-colors"
+                              title="Edit member name, role, or assigned team"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => { setResetTarget(m); setResetSent(false); }}
+                              className="text-slate-500 hover:text-indigo-400 p-1 transition-colors"
+                              title="Send password reset link"
+                            >
+                              <KeyRound className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteMember(m)}
+                              className="text-slate-500 hover:text-rose-400 p-1 transition-colors"
+                              title="Remove user permanently"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

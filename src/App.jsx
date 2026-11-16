@@ -653,6 +653,59 @@ export default function HelpdeskAI() {
       return;
     }
     try {
+      // ── Priority 0: Check if this user has an organization invitation ──
+      const { data: pendingInvite } = await supabase
+        .from("organization_invitations")
+        .select("*")
+        .ilike("email", user.email.toLowerCase().trim())
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (pendingInvite) {
+        const targetOrgId = pendingInvite.org_id;
+        const assignedRole = pendingInvite.role || "technician";
+        const assignedDept = pendingInvite.department || "IT Helpdesk";
+
+        const { data: claimedProfile } = await supabase
+          .from("profiles")
+          .upsert({
+            id: user.id,
+            org_id: targetOrgId,
+            full_name: user.user_metadata?.full_name || pendingInvite.full_name || user.email.split("@")[0],
+            email: user.email.toLowerCase().trim(),
+            role: assignedRole,
+            department: assignedDept,
+            account_type: "business",
+            is_active: true
+          })
+          .select()
+          .maybeSingle();
+
+        try {
+          await supabase
+            .from("organization_invitations")
+            .update({ status: "accepted", accepted_at: new Date().toISOString() })
+            .eq("id", pendingInvite.id);
+        } catch (_) {}
+
+        const finalProfile = claimedProfile || {
+          id: user.id,
+          org_id: targetOrgId,
+          full_name: user.user_metadata?.full_name || user.email.split("@")[0],
+          email: user.email.toLowerCase().trim(),
+          role: assignedRole,
+          department: assignedDept,
+          account_type: "business",
+          is_active: true
+        };
+
+        setCurrentUserProfile(finalProfile);
+        loadData(targetOrgId);
+        return;
+      }
+
       const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
       if (data) {
         // Enforce account suspension: if an admin deactivated this member, block access immediately
@@ -672,7 +725,9 @@ export default function HelpdeskAI() {
         const isMasterOwner = userDomain === PLATFORM_MASTER_DOMAIN;
         const testBusinessMode = getPermittedTestWorkspaceMode(user.email);
         const isIndividual = 
-          !isMasterOwner && !testBusinessMode && (
+          !isMasterOwner && !testBusinessMode && 
+          data.role !== "technician" &&
+          data.role !== "admin" && (
             data.account_type === "individual" || 
             user.user_metadata?.account_type === "individual"
           );
@@ -680,19 +735,74 @@ export default function HelpdeskAI() {
 
         // 0. Permitted Test Account Auto-Promotion (Enterprise / Commercial Testing)
         if (testBusinessMode) {
-          if (data.role !== "admin" || data.account_type !== "business") {
+          const mId = masterOrgId || "474fbf5e-71bd-4656-9632-eb7d9fb559ad";
+          const testOrgName = testBusinessMode === "ENTERPRISE" ? "Akinbiyi Enterprise Fleet" : "Mabels Clothing Commercial";
+          const testSlug = testBusinessMode === "ENTERPRISE" ? "akinbiyi-enterprise" : "mabels-clothing";
+
+          let targetOrgId = data.org_id;
+
+          // If currently bound to Master Org (or unassigned), rebind to their dedicated test organization
+          if (!targetOrgId || targetOrgId === mId) {
+            const { data: existingTestOrg } = await supabase
+              .from("organizations")
+              .select("id")
+              .eq("name", testOrgName)
+              .maybeSingle();
+
+            if (existingTestOrg?.id) {
+              targetOrgId = existingTestOrg.id;
+            } else {
+              const { data: newOrg } = await supabase
+                .from("organizations")
+                .insert({
+                  name: testOrgName,
+                  support_email: user.email,
+                  support_phone: "+234 916 202 9201",
+                  allstaff_email: `staff@${testSlug}.com`,
+                  incident_sla_minutes: 10,
+                  incident_tier2_minutes: 15,
+                  incident_tier3_minutes: 30,
+                  ticket_sla_hours: 1,
+                  enable_global_kb: false,
+                  workspace_mode: testBusinessMode,
+                  portal_slug: testSlug,
+                  remote_fee: 3500,
+                  physical_visit_fee: 10000,
+                  is_master_org: false
+                })
+                .select()
+                .maybeSingle();
+
+              if (newOrg?.id) {
+                targetOrgId = newOrg.id;
+                try {
+                  await supabase.from("teams").insert([
+                    { org_id: newOrg.id, team_name: "IT Helpdesk", alert_email: user.email, is_default: true },
+                    { org_id: newOrg.id, team_name: "Network Team", alert_email: user.email, is_default: false },
+                    { org_id: newOrg.id, team_name: "Database Team", alert_email: user.email, is_default: false },
+                    { org_id: newOrg.id, team_name: "Security Team", alert_email: user.email, is_default: false }
+                  ]);
+                } catch (_) {}
+              }
+            }
+          }
+
+          if (data.role !== "admin" || data.account_type !== "business" || data.org_id !== targetOrgId) {
             await supabase.from("profiles").update({ 
+              org_id: targetOrgId,
               role: "admin", 
               account_type: "business" 
             }).eq("id", user.id);
+            data.org_id = targetOrgId;
             data.role = "admin";
             data.account_type = "business";
           }
-          const mId = masterOrgId || "474fbf5e-71bd-4656-9632-eb7d9fb559ad";
-          if (data.org_id && data.org_id !== mId) {
+
+          if (targetOrgId && targetOrgId !== mId) {
             await supabase.from("organizations").update({ 
-              workspace_mode: testBusinessMode 
-            }).eq("id", data.org_id);
+              workspace_mode: testBusinessMode,
+              is_master_org: false
+            }).eq("id", targetOrgId);
           }
         }
         // 1. Existing Platform Owner Healing: Ensure bound to Master Org as admin & KB permanently active
@@ -2506,10 +2616,12 @@ export default function HelpdeskAI() {
     );
   });
 
-  // Individual account type — strictly for public consumers; Master Owner and Whitelisted Test Accounts are NEVER individual
+  // Individual account type — strictly for public consumers; Master Owner, Whitelisted Test Accounts, Technicians, and Admins are NEVER individual
   const isIndividualAccount =
     !isMasterOwner &&
-    !getPermittedTestWorkspaceMode(currentUser?.email) && (
+    !getPermittedTestWorkspaceMode(currentUser?.email) &&
+    currentUserProfile?.role !== "technician" &&
+    currentUserProfile?.role !== "admin" && (
       currentUserProfile?.account_type === "individual" ||
       currentUser?.user_metadata?.account_type === "individual"
     );
