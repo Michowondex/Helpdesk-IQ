@@ -168,16 +168,29 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
       const targetOrgId = orgId || orgConfig?.id || null;
 
       // ── Clean Multi-Tenant Organization Invitation ─────────────────────────
-      const { error: invErr } = await supabase
+      const invPayload = {
+        org_id: targetOrgId,
+        email: targetEmail,
+        role: role,
+        department: assignedDept,
+        status: "pending"
+      };
+      if (fullName.trim()) {
+        invPayload.full_name = fullName.trim();
+      }
+
+      let { error: invErr } = await supabase
         .from("organization_invitations")
-        .insert({
-          org_id: targetOrgId,
-          email: targetEmail,
-          full_name: fullName.trim(),
-          role: role,
-          department: assignedDept,
-          status: "pending"
-        });
+        .insert(invPayload);
+
+      // Resilient schema fallback: if full_name column hasn't been added yet in DB, retry without it
+      if (invErr && invErr.message?.includes("full_name")) {
+        delete invPayload.full_name;
+        const retry = await supabase
+          .from("organization_invitations")
+          .insert(invPayload);
+        invErr = retry.error;
+      }
 
       if (invErr) throw invErr;
 
