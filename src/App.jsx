@@ -44,6 +44,18 @@ const MfaEnrollModal = lazy(() => import("./components/MfaEnrollModal"));
 // ── Platform Master Workspace — all individual-user tickets route here ────────
 const PLATFORM_MASTER_DOMAIN = "bizadoc.com";
 
+// ── Whitelisted Testing Accounts for Business Workspace Testing ──────────────
+const TEST_ENTERPRISE_EMAIL = "michaelakinbiyi6805@gmail.com";
+const TEST_COMMERCIAL_EMAIL = "mabelsclothing6805@gmail.com";
+
+function getPermittedTestWorkspaceMode(email) {
+  if (!email || typeof email !== "string") return null;
+  const em = email.toLowerCase().trim();
+  if (em === TEST_ENTERPRISE_EMAIL) return "ENTERPRISE";
+  if (em === TEST_COMMERCIAL_EMAIL) return "COMMERCIAL";
+  return null;
+}
+
 // ── Input sanitizer: strip HTML/script tags before DB writes ─────────────────
 function sanitizeInput(str) {
   if (!str || typeof str !== "string") return str;
@@ -653,15 +665,32 @@ export default function HelpdeskAI() {
 
         const userDomain = user.email && user.email.includes("@") ? user.email.split("@")[1].toLowerCase() : "";
         const isMasterOwner = userDomain === PLATFORM_MASTER_DOMAIN;
+        const testBusinessMode = getPermittedTestWorkspaceMode(user.email);
         const isIndividual = 
-          !isMasterOwner && (
+          !isMasterOwner && !testBusinessMode && (
             data.account_type === "individual" || 
             user.user_metadata?.account_type === "individual"
           );
-        const hasCompany = Boolean(user.user_metadata?.company_name);
+        const hasCompany = Boolean(user.user_metadata?.company_name) || Boolean(testBusinessMode);
 
+        // 0. Permitted Test Account Auto-Promotion (Enterprise / Commercial Testing)
+        if (testBusinessMode) {
+          if (data.role !== "admin" || data.account_type !== "business") {
+            await supabase.from("profiles").update({ 
+              role: "admin", 
+              account_type: "business" 
+            }).eq("id", user.id);
+            data.role = "admin";
+            data.account_type = "business";
+          }
+          if (data.org_id) {
+            await supabase.from("organizations").update({ 
+              workspace_mode: testBusinessMode 
+            }).eq("id", data.org_id);
+          }
+        }
         // 1. Existing Platform Owner Healing: Ensure bound to Master Org as admin & KB permanently active
-        if (isMasterOwner) {
+        else if (isMasterOwner) {
           const mOrgId = masterOrgId || await resolveMasterOrgId();
           if (mOrgId) {
             await supabase.from("organizations").update({ enable_global_kb: true, is_master_org: true }).eq("id", mOrgId);
@@ -752,8 +781,9 @@ export default function HelpdeskAI() {
         const userDomain = user.email && user.email.includes("@") ? user.email.split("@")[1].toLowerCase() : "company.com";
         const isMasterOwner = userDomain === PLATFORM_MASTER_DOMAIN;
 
-        // Consumer webmail domains are always individual public users
-        const isConsumer = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com", "aol.com"].includes(userDomain);
+        // Consumer webmail domains are always individual public users (unless explicitly whitelisted for testing)
+        const testMode = getPermittedTestWorkspaceMode(user.email);
+        const isConsumer = !testMode && ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com", "aol.com"].includes(userDomain);
 
         // Retrieve any pending OAuth choice selected on registration screen before Google redirect
         let pendingOAuth = null;
@@ -769,8 +799,11 @@ export default function HelpdeskAI() {
         let accountType = user.user_metadata?.account_type || pendingOAuth?.accountType || (companyName ? "business" : "individual");
         let workspaceMode = user.user_metadata?.workspace_mode || pendingOAuth?.workspaceMode || "ENTERPRISE";
 
-        // Consumer personal emails (e.g. @gmail.com) always link to Master Org as individual users
-        if (isConsumer && !isMasterOwner) {
+        if (testMode) {
+          accountType = "business";
+          workspaceMode = testMode;
+          companyName = testMode === "ENTERPRISE" ? "Akinbiyi Enterprise Fleet" : "Mabels Clothing Commercial";
+        } else if (isConsumer && !isMasterOwner) {
           accountType = "individual";
           companyName = null;
         }
@@ -1184,6 +1217,24 @@ export default function HelpdeskAI() {
           }
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "monitored_services",
+          filter: `org_id=eq.${activeOrgId}`
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setServices(prev => prev.some(s => s.id === payload.new.id) ? prev : [...prev, payload.new]);
+          } else if (payload.eventType === "UPDATE") {
+            setServices(prev => prev.map(s => s.id === payload.new.id ? { ...s, ...payload.new } : s));
+          } else if (payload.eventType === "DELETE") {
+            setServices(prev => prev.filter(s => s.id !== payload.old.id));
+          }
+        }
+      )
       .subscribe();
 
     return () => {
@@ -1390,9 +1441,10 @@ export default function HelpdeskAI() {
 
   // Multi-Tier Incident Escalation Ladder Check (Tier 1 -> Tier 2 -> Tier 3)
   useEffect(() => {
-    const _tier1ThresholdMs = (orgConfig.incident_sla_minutes || 10) * 60000;
-    const tier2ThresholdMs = 15 * 60000; // 15 mins -> Escalate to IT Lead / Dept Manager
-    const tier3ThresholdMs = 30 * 60000; // 30 mins -> Escalate to All-Staff ONLY if CRITICAL
+    const tier2Minutes = orgConfig?.incident_tier2_minutes || 15;
+    const tier3Minutes = orgConfig?.incident_tier3_minutes || 30;
+    const tier2ThresholdMs = tier2Minutes * 60000; // Configurable -> Escalate to IT Lead / Dept Manager
+    const tier3ThresholdMs = tier3Minutes * 60000; // Configurable -> Escalate to All-Staff ONLY if CRITICAL
 
     const check = setInterval(async () => {
       for (const inc of incidents) {
@@ -2421,9 +2473,10 @@ export default function HelpdeskAI() {
     );
   });
 
-  // Individual account type — strictly for public consumers; Master Owner is NEVER individual
+  // Individual account type — strictly for public consumers; Master Owner and Whitelisted Test Accounts are NEVER individual
   const isIndividualAccount =
-    !isMasterOwner && (
+    !isMasterOwner &&
+    !getPermittedTestWorkspaceMode(currentUser?.email) && (
       currentUserProfile?.account_type === "individual" ||
       currentUser?.user_metadata?.account_type === "individual"
     );

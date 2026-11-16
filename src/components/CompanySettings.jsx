@@ -37,6 +37,8 @@ export default function CompanySettings({
     support_chat_link: orgConfig?.support_chat_link || "",
     support_whatsapp: orgConfig?.support_whatsapp || "",
     incident_sla_minutes: orgConfig?.incident_sla_minutes || 10,
+    incident_tier2_minutes: orgConfig?.incident_tier2_minutes || 15,
+    incident_tier3_minutes: orgConfig?.incident_tier3_minutes || 30,
     ticket_sla_hours: orgConfig?.ticket_sla_hours || 1,
     work_start_hour: orgConfig?.work_start_hour !== undefined ? orgConfig.work_start_hour : 8,
     work_end_hour: orgConfig?.work_end_hour !== undefined ? orgConfig.work_end_hour : 18,
@@ -194,6 +196,8 @@ export default function CompanySettings({
         support_chat_link: orgConfig.support_chat_link !== undefined ? orgConfig.support_chat_link : prev.support_chat_link,
         support_whatsapp: orgConfig.support_whatsapp !== undefined ? orgConfig.support_whatsapp : prev.support_whatsapp,
         incident_sla_minutes: orgConfig.incident_sla_minutes || prev.incident_sla_minutes,
+        incident_tier2_minutes: orgConfig.incident_tier2_minutes !== undefined ? orgConfig.incident_tier2_minutes : prev.incident_tier2_minutes,
+        incident_tier3_minutes: orgConfig.incident_tier3_minutes !== undefined ? orgConfig.incident_tier3_minutes : prev.incident_tier3_minutes,
         ticket_sla_hours: orgConfig.ticket_sla_hours || prev.ticket_sla_hours,
         work_start_hour: orgConfig.work_start_hour !== undefined ? orgConfig.work_start_hour : prev.work_start_hour,
         work_end_hour: orgConfig.work_end_hour !== undefined ? orgConfig.work_end_hour : prev.work_end_hour,
@@ -820,31 +824,11 @@ export default function CompanySettings({
             Custom SLA & Auto-Escalation Timers
           </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Ticket SLA */}
             <div className="bg-slate-950/60 border border-slate-800/80 rounded-lg p-4">
               <div className="flex justify-between items-center mb-2">
-                <span className="text-xs font-medium text-slate-300">Incident All-Staff Notice:</span>
-                <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                  {form.incident_sla_minutes} Minutes
-                </span>
-              </div>
-              <input
-                type="range"
-                min="5"
-                max="60"
-                step="5"
-                value={form.incident_sla_minutes}
-                onChange={e => setForm({ ...form, incident_sla_minutes: Number(e.target.value) })}
-                className="w-full accent-amber-500 cursor-pointer"
-              />
-              <p className="text-[11px] text-slate-500 mt-2">
-                Trigger company-wide urgent broadcast email if a critical incident stays unacknowledged.
-              </p>
-            </div>
-
-            <div className="bg-slate-950/60 border border-slate-800/80 rounded-lg p-4">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-xs font-medium text-slate-300">Ticket SLA Breach Threshold:</span>
+                <span className="text-xs font-medium text-slate-300">Ticket SLA Target:</span>
                 <span className="text-xs font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
                   {form.ticket_sla_hours} Hour(s)
                 </span>
@@ -852,14 +836,80 @@ export default function CompanySettings({
               <input
                 type="range"
                 min="1"
-                max="24"
+                max="72"
                 step="1"
                 value={form.ticket_sla_hours}
                 onChange={e => setForm({ ...form, ticket_sla_hours: Number(e.target.value) })}
                 className="w-full accent-indigo-500 cursor-pointer"
               />
               <p className="text-[11px] text-slate-500 mt-2">
-                Mark open tickets with red SLA Breached badge and alert managers if unresolved.
+                Target resolution timeframe for tickets. Automatically pauses outside configured business operating hours.
+              </p>
+            </div>
+
+            {/* Tier 1 Incident SLA */}
+            <div className="bg-slate-950/60 border border-slate-800/80 rounded-lg p-4">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-medium text-slate-300">Tier 1 Initial Response SLA:</span>
+                <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                  {form.incident_sla_minutes} Minutes
+                </span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="60"
+                step="1"
+                value={form.incident_sla_minutes}
+                onChange={e => setForm({ ...form, incident_sla_minutes: Number(e.target.value) })}
+                className="w-full accent-amber-500 cursor-pointer"
+              />
+              <p className="text-[11px] text-slate-500 mt-2">
+                Initial response target for newly detected outages before automated escalation triggers.
+              </p>
+            </div>
+
+            {/* Tier 2 Incident Escalation */}
+            <div className="bg-slate-950/60 border border-slate-800/80 rounded-lg p-4">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-medium text-slate-300">Tier 2 Manager Escalation:</span>
+                <span className="text-xs font-bold text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded border border-orange-500/20">
+                  {form.incident_tier2_minutes} Minutes
+                </span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="120"
+                step="1"
+                value={form.incident_tier2_minutes}
+                onChange={e => setForm({ ...form, incident_tier2_minutes: Number(e.target.value) })}
+                className="w-full accent-orange-500 cursor-pointer"
+              />
+              <p className="text-[11px] text-slate-500 mt-2">
+                Escalates to IT Manager / Supervisor email if an active incident remains open for this long (Set to 1m for quick testing).
+              </p>
+            </div>
+
+            {/* Tier 3 Incident Escalation */}
+            <div className="bg-slate-950/60 border border-slate-800/80 rounded-lg p-4">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-medium text-slate-300">Tier 3 Executive / All-Staff:</span>
+                <span className="text-xs font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
+                  {form.incident_tier3_minutes} Minutes
+                </span>
+              </div>
+              <input
+                type="range"
+                min="2"
+                max="240"
+                step="1"
+                value={form.incident_tier3_minutes}
+                onChange={e => setForm({ ...form, incident_tier3_minutes: Number(e.target.value) })}
+                className="w-full accent-rose-500 cursor-pointer"
+              />
+              <p className="text-[11px] text-slate-500 mt-2">
+                Dispatches urgent all-staff broadcast and executive alerts for sustained critical outages (Set to 2m for quick testing).
               </p>
             </div>
           </div>

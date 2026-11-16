@@ -2,6 +2,49 @@ import { useState, useEffect } from "react";
 import { ShieldCheck, KeyRound, Copy, Check, AlertCircle, X, ArrowRight, Loader2, Smartphone, RefreshCw } from "lucide-react";
 import { supabase } from "../supabase";
 
+// Helper: cleanly extract SVG XML from Supabase data-URI or raw SVG string
+function parseSvgFromQr(qrSource) {
+  if (!qrSource) return "";
+  let str = qrSource.trim();
+
+  // If base64 data URI
+  if (str.startsWith("data:image/svg+xml;base64,")) {
+    try {
+      const base64Part = str.replace("data:image/svg+xml;base64,", "");
+      str = atob(base64Part);
+    } catch (_) {}
+  }
+  // If utf-8 / URL-encoded data URI
+  else if (str.startsWith("data:image/svg+xml")) {
+    const commaIdx = str.indexOf(",");
+    if (commaIdx !== -1) {
+      const rawPayload = str.slice(commaIdx + 1);
+      try {
+        str = decodeURIComponent(rawPayload);
+      } catch (_) {
+        str = rawPayload;
+      }
+    }
+  }
+
+  // Extract pure <svg ... </svg>
+  const svgStart = str.indexOf("<svg");
+  if (svgStart !== -1) {
+    str = str.slice(svgStart);
+    // Ensure viewBox exists for responsive scaling without blurring
+    if (!str.includes("viewBox") && str.includes("width=") && str.includes("height=")) {
+      const wMatch = str.match(/width=["'](\d+)["']/);
+      const hMatch = str.match(/height=["'](\d+)["']/);
+      if (wMatch && hMatch) {
+        str = str.replace("<svg", `<svg viewBox="0 0 ${wMatch[1]} ${hMatch[1]}"`);
+      }
+    }
+    return str;
+  }
+
+  return qrSource;
+}
+
 export default function MfaEnrollModal({ isOpen, isMandatory = false, onClose, onSuccess }) {
   const [loading, setLoading] = useState(true);
   const [factorId, setFactorId] = useState("");
@@ -42,17 +85,9 @@ export default function MfaEnrollModal({ isOpen, isMandatory = false, onClose, o
       if (data) {
         setFactorId(data.id);
         
-        // Supabase returns raw SVG string `<svg ...>...</svg>`
-        let rawSvg = data.totp?.qr_code || "";
-        
-        // Ensure SVG has crisp edge rendering and responsive sizing for mobile camera sensors
-        if (rawSvg.includes("<svg")) {
-          // Normalize SVG style to prevent optical blurring and ensure high contrast
-          if (!rawSvg.includes("shape-rendering")) {
-            rawSvg = rawSvg.replace("<svg", '<svg style="shape-rendering: crispEdges; image-rendering: pixelated; width: 100%; height: 100%; display: block;"');
-          }
-        }
-        setQrCodeSvg(rawSvg);
+        // Supabase returns raw SVG string or Data-URI `<svg ...>...</svg>`
+        const cleanSvg = parseSvgFromQr(data.totp?.qr_code || "");
+        setQrCodeSvg(cleanSvg);
         setSecretKey(data.totp?.secret || "");
       }
     } catch (err) {
@@ -177,25 +212,30 @@ export default function MfaEnrollModal({ isOpen, isMandatory = false, onClose, o
                 </div>
 
                 {/* High-contrast pure white container with ample quiet-zone for camera optical detection */}
-                <div className="flex justify-center items-center p-5 bg-white rounded-xl shadow-md max-w-[220px] mx-auto overflow-hidden">
+                <div className="flex flex-col items-center justify-center p-6 bg-white rounded-2xl shadow-xl max-w-[260px] mx-auto border-4 border-white select-none">
                   {qrCodeSvg ? (
                     qrCodeSvg.startsWith("<svg") ? (
                       <div 
-                        className="w-44 h-44 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
+                        className="w-48 h-48 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:block"
+                        style={{ shapeRendering: "crispEdges", imageRendering: "pixelated" }}
                         dangerouslySetInnerHTML={{ __html: qrCodeSvg }}
                       />
                     ) : (
                       <img 
                         src={qrCodeSvg} 
                         alt="Authenticator QR Code" 
-                        className="w-44 h-44 object-contain"
+                        className="w-48 h-48 object-contain"
+                        style={{ imageRendering: "pixelated" }}
                       />
                     )
                   ) : (
-                    <div className="w-44 h-44 flex items-center justify-center text-slate-400 text-xs">
+                    <div className="w-48 h-48 flex items-center justify-center text-slate-400 text-xs">
                       QR Code Unavailable
                     </div>
                   )}
+                  <span className="text-[10px] font-semibold text-slate-500 mt-2 tracking-wider uppercase">
+                    Point camera at code
+                  </span>
                 </div>
               </div>
 
