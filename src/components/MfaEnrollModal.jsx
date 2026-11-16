@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { ShieldCheck, KeyRound, Copy, Check, AlertCircle, X, ArrowRight, Loader2, Smartphone, RefreshCw } from "lucide-react";
+import QRCode from "qrcode";
 import { supabase } from "../supabase";
 
 // Helper: cleanly extract SVG XML from Supabase data-URI or raw SVG string
@@ -84,11 +85,33 @@ export default function MfaEnrollModal({ isOpen, isMandatory = false, onClose, o
       if (error) throw error;
       if (data) {
         setFactorId(data.id);
-        
-        // Supabase returns raw SVG string or Data-URI `<svg ...>...</svg>`
-        const cleanSvg = parseSvgFromQr(data.totp?.qr_code || "");
-        setQrCodeSvg(cleanSvg);
         setSecretKey(data.totp?.secret || "");
+
+        // 1. Primary: Generate standard high-resolution PNG QR Code from Supabase TOTP URI
+        const totpUri = data.totp?.uri;
+        let renderedQr = "";
+        if (totpUri) {
+          try {
+            renderedQr = await QRCode.toDataURL(totpUri, {
+              width: 256,
+              margin: 2,
+              color: {
+                dark: "#000000",
+                light: "#ffffff"
+              },
+              errorCorrectionLevel: "M"
+            });
+          } catch (qrErr) {
+            console.warn("QRCode.toDataURL generation exception:", qrErr);
+          }
+        }
+
+        // 2. Fallback: If URI generation failed, parse Supabase's raw SVG
+        if (!renderedQr && data.totp?.qr_code) {
+          renderedQr = parseSvgFromQr(data.totp.qr_code);
+        }
+
+        setQrCodeSvg(renderedQr);
       }
     } catch (err) {
       setErrorMsg(err.message || "Failed to initialize authenticator enrollment.");
@@ -212,11 +235,11 @@ export default function MfaEnrollModal({ isOpen, isMandatory = false, onClose, o
                 </div>
 
                 {/* High-contrast pure white container with ample quiet-zone for camera optical detection */}
-                <div className="flex flex-col items-center justify-center p-6 bg-white rounded-2xl shadow-xl max-w-[260px] mx-auto border-4 border-white select-none">
+                <div className="flex flex-col items-center justify-center p-5 bg-white rounded-2xl shadow-xl max-w-[270px] mx-auto border-4 border-white select-none">
                   {qrCodeSvg ? (
                     qrCodeSvg.startsWith("<svg") ? (
                       <div 
-                        className="w-48 h-48 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:block"
+                        className="w-52 h-52 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:block"
                         style={{ shapeRendering: "crispEdges", imageRendering: "pixelated" }}
                         dangerouslySetInnerHTML={{ __html: qrCodeSvg }}
                       />
@@ -224,17 +247,16 @@ export default function MfaEnrollModal({ isOpen, isMandatory = false, onClose, o
                       <img 
                         src={qrCodeSvg} 
                         alt="Authenticator QR Code" 
-                        className="w-48 h-48 object-contain"
-                        style={{ imageRendering: "pixelated" }}
+                        className="w-52 h-52 object-contain block mx-auto"
                       />
                     )
                   ) : (
-                    <div className="w-48 h-48 flex items-center justify-center text-slate-400 text-xs">
+                    <div className="w-52 h-52 flex items-center justify-center text-slate-400 text-xs">
                       QR Code Unavailable
                     </div>
                   )}
-                  <span className="text-[10px] font-semibold text-slate-500 mt-2 tracking-wider uppercase">
-                    Point camera at code
+                  <span className="text-[10px] font-semibold text-slate-600 mt-2 tracking-wider uppercase">
+                    Scan with Google / Microsoft Authenticator
                   </span>
                 </div>
               </div>

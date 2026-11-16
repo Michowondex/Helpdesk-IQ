@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { UserPlus, Users, Trash2, Mail, Shield, CheckCircle2, AlertCircle, X, KeyRound, Building2, Copy, Check, Sparkles, RefreshCw, Send, Clock, UserX, UserCheck } from "lucide-react";
+import { UserPlus, Users, Trash2, Mail, Shield, CheckCircle2, AlertCircle, X, KeyRound, Building2, Copy, Check, Sparkles, RefreshCw, Send, Clock, UserX, UserCheck, Edit3 } from "lucide-react";
 import { supabase } from "../supabase";
 
 const ROLE_BADGES = {
@@ -43,6 +43,11 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
   const [department, setDepartment] = useState("");
   const [tempPassword, setTempPassword] = useState("");
 
+  // Edit member modal states
+  const [editingMember, setEditingMember] = useState(null);
+  const [editForm, setEditForm] = useState({ full_name: "", role: "technician", department: "" });
+  const [savingEdit, setSavingEdit] = useState(false);
+
   // Determine active company domain
   const getCompanyDomain = () => {
     if (orgConfig?.domain && orgConfig.domain.trim()) {
@@ -73,8 +78,34 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
       }
       const { data, error } = await query;
       if (!error && data) {
-        setMembers(data);
-        if (onMembersChange) onMembersChange(data);
+        // Automatic Deduplication Guard: Keep only 1 record per unique lowercase email
+        const seenEmails = new Set();
+        const uniqueMembers = [];
+        const duplicateIdsToDelete = [];
+
+        for (const m of data) {
+          const em = m.email ? m.email.toLowerCase().trim() : null;
+          if (em) {
+            if (seenEmails.has(em)) {
+              duplicateIdsToDelete.push(m.id);
+            } else {
+              seenEmails.add(em);
+              uniqueMembers.push(m);
+            }
+          } else {
+            uniqueMembers.push(m);
+          }
+        }
+
+        // Asynchronously purge duplicate rows from DB so they never reappear
+        if (duplicateIdsToDelete.length > 0) {
+          for (const dupId of duplicateIdsToDelete) {
+            supabase.from("profiles").delete().eq("id", dupId).catch(() => {});
+          }
+        }
+
+        setMembers(uniqueMembers);
+        if (onMembersChange) onMembersChange(uniqueMembers);
       }
     } catch (err) {
       console.warn("Error loading members:", err);
@@ -100,28 +131,35 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
       return;
     }
 
+    // ── Guard 1: Client-Side Duplicate Prevention ─────────────────────────
+    const existingInState = members.find(m => m.email?.toLowerCase().trim() === targetEmail);
+    if (existingInState) {
+      notify(`⚠️ "${targetEmail}" is already registered in "${existingInState.department || 'General IT'}". Use Edit to change their role or team.`, "#ef4444");
+      return;
+    }
+
     setAdding(true);
 
     try {
       const tempPass = tempPassword.trim() || "BizaDesk@2026";
       const assignedDept = department || (teams[0]?.team_name || "General IT");
 
-      // ── STEP 1: Check if a profile already exists for this email ──────────
-      // (Could be a pre-existing account from a previous invite attempt)
-      const { data: existingProfile } = await supabase
+      // ── Guard 2: Direct Database Duplicate Check ──────────────────────────
+      const { data: dbMatches } = await supabase
         .from("profiles")
-        .select("id")
-        .eq("email", targetEmail)
-        .maybeSingle();
+        .select("id, full_name, email, department, role")
+        .eq("email", targetEmail);
 
-      let profileId = existingProfile?.id || crypto.randomUUID();
+      if (dbMatches && dbMatches.length > 0) {
+        const match = dbMatches[0];
+        notify(`⚠️ A user with email "${targetEmail}" already exists in "${match.department || 'General IT'}". Cannot add duplicate.`, "#ef4444");
+        setAdding(false);
+        return;
+      }
 
-      // ── STEP 2: Provision the member directly in public.profiles ─────────
-      // This avoids client-side supabase.auth.signUp() which requires captcha.
-      // The invited user signs in later (Google OAuth or email link),
-      // and App.jsx fetchProfile() will claim & link this profile row
-      // to their auth.uid automatically.
+      // ── Provision New Member ──────────────────────────────────────────────
       const targetOrgId = orgId || orgConfig?.id || null;
+      const profileId = crypto.randomUUID();
       const newMemberPayload = {
         id: profileId,
         org_id: targetOrgId,
@@ -133,22 +171,11 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
         is_active: true
       };
 
-      const { error: profileErr } = await supabase
+      const { error: insertErr } = await supabase
         .from("profiles")
-        .upsert(newMemberPayload, { onConflict: "email" });
+        .insert(newMemberPayload);
 
-      if (profileErr) {
-        // Fallback: try direct insert with a fresh UUID if conflict was on id
-        const { error: insertErr } = await supabase
-          .from("profiles")
-          .insert({
-            ...newMemberPayload,
-            id: crypto.randomUUID()
-          });
-        if (insertErr && !insertErr.message?.includes("duplicate") && !insertErr.message?.includes("unique")) {
-          throw insertErr;
-        }
-      }
+      if (insertErr) throw insertErr;
 
       setCreatedUserNotice({
         name: fullName.trim(),
@@ -180,6 +207,51 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
       loadMembers();
     } catch (err) {
       notify(`Error deleting user: ${err.message}`, "#ef4444");
+    }
+  };
+
+  const handleOpenEdit = (m) => {
+    setEditingMember(m);
+    setEditForm({
+      full_name: m.full_name || "",
+      role: m.role || "technician",
+      department: m.department || (teams[0]?.team_name || "General IT")
+    });
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!editingMember) return;
+    setSavingEdit(true);
+    try {
+      const updates = {
+        full_name: editForm.full_name.trim() || editingMember.full_name,
+        role: editForm.role,
+        department: editForm.department
+      };
+      const { error } = await supabase
+        .from("profiles")
+        .update(updates)
+        .eq("id", editingMember.id);
+
+      if (error) throw error;
+
+      try {
+        await supabase.from("session_audit_logs").insert({
+          org_id: orgId || null,
+          user_name: editingMember.full_name || editingMember.email,
+          action: "MEMBER_UPDATED",
+          details: `Profile updated by Admin: Team set to "${updates.department}", Role set to "${updates.role}". All ticket & chat history preserved.`
+        });
+      } catch (_) {}
+
+      notify(`✓ Profile for ${updates.full_name || editingMember.email} updated successfully.`);
+      setEditingMember(null);
+      loadMembers();
+    } catch (err) {
+      notify(`Failed to update profile: ${err.message}`, "#ef4444");
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -477,6 +549,13 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
                             {isSuspended ? <UserCheck className="w-4 h-4" /> : <UserX className="w-4 h-4" />}
                           </button>
                           <button
+                            onClick={() => handleOpenEdit(m)}
+                            className="text-slate-500 hover:text-cyan-400 p-1 transition-colors"
+                            title="Edit member name, role, or assigned team"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => { setResetTarget(m); setResetSent(false); }}
                             className="text-slate-500 hover:text-indigo-400 p-1 transition-colors"
                             title="Send password reset link"
@@ -726,6 +805,108 @@ export default function UserManagement({ orgId, orgConfig, teams = [], onMembers
                   className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium py-2.5 rounded-lg shadow-lg shadow-indigo-950"
                 >
                   {adding ? "Creating..." : "Save Member"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Member Profile (Zero Data Loss) */}
+      {editingMember && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden relative">
+            <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+                  <Edit3 className="w-5 h-5 text-cyan-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Edit Member Profile</h3>
+                  <p className="text-xs text-slate-400 font-mono">{editingMember.email}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingMember(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">Full Name</label>
+                <input
+                  type="text"
+                  value={editForm.full_name}
+                  onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-cyan-500 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">Role &amp; Permissions</label>
+                <select
+                  value={editForm.role}
+                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-cyan-500 focus:outline-none"
+                >
+                  <option value="technician">Technician (IT Operations Console)</option>
+                  <option value="user">Staff User (Employee Self-Service Only)</option>
+                  <option value="admin">Admin (Full System &amp; Billing Access)</option>
+                </select>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  {ROLE_BADGES[editForm.role]?.desc}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">Assigned IT Department / Team</label>
+                <select
+                  value={editForm.department}
+                  onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-cyan-500 focus:outline-none"
+                >
+                  <option value="">— Select Team —</option>
+                  {teams.length > 0 ? (
+                    teams.map((t) => (
+                      <option key={t.id} value={t.team_name}>
+                        {t.team_name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="IT Support">IT Support</option>
+                      <option value="Network Team">Network Team</option>
+                      <option value="Database Team">Database Team</option>
+                      <option value="Application Support">Application Support</option>
+                      <option value="Security Team">Security Team</option>
+                    </>
+                  )}
+                </select>
+                <p className="text-[11px] text-emerald-400/80 mt-1.5 flex items-center gap-1">
+                  <Shield className="w-3.5 h-3.5 shrink-0" />
+                  <span>Zero Data Loss: All historical tickets, chats, and resolution metrics are preserved.</span>
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingMember(null)}
+                  className="flex-1 py-2.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-xs text-slate-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="flex-1 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-xs font-medium py-2.5 rounded-lg shadow-lg shadow-cyan-950 flex items-center justify-center gap-1.5"
+                >
+                  {savingEdit ? "Updating..." : "Save Changes"}
                 </button>
               </div>
             </form>
