@@ -1636,7 +1636,6 @@ export default function HelpdeskAI() {
           if (emailData) await saveEmail(emailData);
           await supabase.from("incidents").update({ 
             escalation_tier: 3, 
-            escalated: true, 
             status: isCritical ? "CRITICAL_ALL_STAFF_ESCALATED" : "TIER3_EXECUTIVE_ESCALATED" 
           }).eq("id", inc.id);
 
@@ -1760,10 +1759,10 @@ export default function HelpdeskAI() {
       app: sanitizeInput(formData.app),
       opened_at: Date.now(),
       last_update: Date.now(),
-      escalated: false,
+      escalation_tier: 1,
       resolved: false,
       description: sanitizeInput(formData.desc),
-      assignee: "Unassigned"
+      assigned_to: null
     };
 
     const { data: insertedInc, error } = await supabase.from("incidents").insert(inc).select().single();
